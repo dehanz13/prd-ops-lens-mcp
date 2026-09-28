@@ -22,6 +22,7 @@ const provingTests = {
     ['test/core.test.ts', 'test/server.test.ts'],
     ['test/core.test.ts', 'test/guardrails-foundation.test.ts'],
     ['test/repository-guardrails.test.ts', 'test/private-denylist.test.ts'],
+    ['scripts/seed-project.mjs --plan', 'test/repository-guardrails.test.ts'],
   ],
   B: [
     ['scripts/smoke-demo.mjs', 'test/grafana.test.ts'],
@@ -193,19 +194,23 @@ function ensureLabels() {
 
 function ensureMilestones() {
   const existing = api('GET', `repos/${repo}/milestones?state=all&per_page=100`);
-  const titles = new Set(existing.map((milestone) => milestone.title));
+  const byTitle = new Map(existing.map((milestone) => [milestone.title, milestone]));
   for (const milestone of plan.milestones) {
-    if (!titles.has(milestone.id)) {
-      api('POST', `repos/${repo}/milestones`, {
+    if (!byTitle.has(milestone.id)) {
+      const created = api('POST', `repos/${repo}/milestones`, {
         title: milestone.id,
         description: `${milestone.name}: ${milestone.goal}`,
       });
+      byTitle.set(milestone.id, created);
     }
   }
+  return byTitle;
 }
 
-function setIssueMilestone(issue, milestone) {
-  gh(['issue', 'edit', String(issue.number), '--repo', repo, '--milestone', milestone]);
+function setIssueMilestone(issue, milestone, milestones) {
+  if (issue.milestone?.title === milestone) return;
+  api('PATCH', `repos/${repo}/issues/${issue.number}`, { milestone: milestones.get(milestone).number });
+  issue.milestone = { title: milestone };
 }
 
 function issueBody(milestone, story, epicNumber, storyIndex) {
@@ -218,37 +223,47 @@ function epicBody(milestone, stories = []) {
   return `## Goal\n\n${milestone.goal}\n\n## Guardrails\n\n${milestone.guardrails.join(', ')}. Each story lists its exact IDs and proving tests.\n\n## Stories\n\n${stories.map((issue) => `- [ ] #${issue.number} — ${issue.title}`).join('\n') || 'Stories will be linked as they are created.'}\n\nSee the pinned Definition of Done issue before closing this epic.\n`;
 }
 
-function ensureIssue(issues, title, body, issueLabels, parent) {
+function ensureIssue(issues, title, body, issueLabels) {
   if (issues.has(title)) return issues.get(title);
-  const args = ['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-',
-    '--label', issueLabels.join(',')];
-  if (parent) args.push('--parent', String(parent));
-  const url = gh(args, body).split('\n').at(-1);
-  const number = Number(url.match(/\/issues\/(\d+)$/)?.[1]);
-  if (!number) throw new Error(`Issue creation returned no issue URL for ${title}`);
-  const issue = { number, title, url, body };
+  const created = api('POST', `repos/${repo}/issues`, { title, body, labels: issueLabels });
+  const issue = { number: created.number, title, url: created.html_url, body, milestone: null };
+  if (!issue.number || !issue.url) throw new Error(`Issue creation returned no issue URL for ${title}`);
   issues.set(title, issue);
   return issue;
 }
 
-function ensureProjectItem(number, itemUrls, issue) {
-  if (!itemUrls.has(issue.url)) {
-    gh(['project', 'item-add', String(number), '--owner', owner, '--url', issue.url]);
-    itemUrls.add(issue.url);
-  }
+function projectItems(number) {
+  const data = graphql(`query { user(login:${JSON.stringify(owner)}) { projectV2(number:${number}) {
+    items(first:100) { nodes { id content { ... on Issue { url } } } }
+  } } }`);
+  return new Map(data.user.projectV2.items.nodes
+    .filter((item) => item.content?.url)
+    .map((item) => [item.content.url, item.id]));
 }
 
-function setField(number, issue, name, value) {
-  gh(['project', 'item-edit', String(number), '--owner', owner, '--url', issue.url,
-    '--field', name, '--value', String(value)]);
+function ensureProjectItem(project, itemIds, issue) {
+  if (itemIds.has(issue.url)) return itemIds.get(issue.url);
+  const contentId = api('GET', `repos/${repo}/issues/${issue.number}`).node_id;
+  const data = graphql(`mutation { addProjectV2ItemById(input:{projectId:${JSON.stringify(project.id)},contentId:${JSON.stringify(contentId)}}) { item { id } } }`);
+  const itemId = data.addProjectV2ItemById.item.id;
+  itemIds.set(issue.url, itemId);
+  return itemId;
 }
 
-function setIteration(number, issue, sprint, project) {
-  const field = project.fields.nodes.find((candidate) => candidate.name === 'Sprint');
-  const iteration = field.configuration.iterations.find((candidate) => candidate.title === `Sprint ${sprint}`);
-  if (!iteration) throw new Error(`Missing Sprint ${sprint} iteration`);
-  gh(['project', 'item-edit', String(number), '--owner', owner, '--url', issue.url,
-    '--field', 'Sprint', '--iteration-id', iteration.id]);
+function setFields(project, itemId, entries) {
+  const mutations = entries.map(([name, value], index) => {
+    const field = project.fields.nodes.find((candidate) => candidate.name === name);
+    if (!field) throw new Error(`Missing ${name} field`);
+    const optionId = name === 'Sprint'
+      ? field.configuration.iterations.find((iteration) => iteration.title === `Sprint ${value}`)?.id
+      : field.options.find((option) => option.name === String(value))?.id;
+    if (!optionId) throw new Error(`Missing ${name} option ${value}`);
+    const valueInput = name === 'Sprint'
+      ? `{iterationId:${JSON.stringify(optionId)}}`
+      : `{singleSelectOptionId:${JSON.stringify(optionId)}}`;
+    return `field${index}: updateProjectV2ItemFieldValue(input:{projectId:${JSON.stringify(project.id)},itemId:${JSON.stringify(itemId)},fieldId:${JSON.stringify(field.id)},value:${valueInput}}) { projectV2Item { id } }`;
+  });
+  if (mutations.length) graphql(`mutation { ${mutations.join(' ')} }`);
 }
 
 function main() {
@@ -261,45 +276,61 @@ function main() {
   }
   if (!process.argv.includes('--apply')) throw new Error('Use --plan to inspect or --apply to create public GitHub resources');
   gh(['auth', 'status']);
-  const number = ensureProject();
-  const project = ensureFields(number);
-  ensureViews(project);
+  const issuesOnly = process.argv.includes('--issues-only');
+  const number = issuesOnly ? undefined : ensureProject();
+  const project = issuesOnly ? undefined : ensureFields(number);
+  if (project) ensureViews(project);
   ensureLabels();
-  ensureMilestones();
-  const existing = json(['issue', 'list', '--repo', repo, '--state', 'all', '--limit', '200', '--json', 'number,title,url,body']);
+  const milestones = ensureMilestones();
+  const existing = api('GET', `repos/${repo}/issues?state=all&per_page=100`)
+    .filter((issue) => !issue.pull_request)
+    .map((issue) => ({ ...issue, url: issue.html_url }));
   const issues = new Map(existing.map((issue) => [issue.title, issue]));
-  const listed = json(['project', 'item-list', String(number), '--owner', owner, '--limit', '200', '--format', 'json']);
-  const itemUrls = new Set((listed.items ?? []).map((item) => item.content?.url).filter(Boolean));
+  const itemIds = project ? projectItems(number) : new Map();
   const dod = ensureIssue(issues, 'Definition of Done', 'A story is Done only when:\n\n- [ ] Lint and typecheck pass.\n- [ ] Unit, replay, and relevant demo tests pass.\n- [ ] Evals and guardrail traceability pass.\n- [ ] Secret scan passes with no private data in the diff.\n- [ ] Public documentation and permission guidance are current.\n- [ ] A reviewed PR links the story and merges into develop.\n\nLive checks are reported separately from local and CI evidence. Completed velocity counts merged stories only.\n', ['docs', 'guardrail']);
-  gh(['issue', 'pin', String(dod.number), '--repo', repo]);
-  ensureProjectItem(number, itemUrls, dod);
-  setField(number, dod, 'Status', 'Ready');
+  if (project) {
+    gh(['issue', 'pin', String(dod.number), '--repo', repo]);
+    setFields(project, ensureProjectItem(project, itemIds, dod), [['Status', 'Ready']]);
+  }
+  const resumeAt = process.argv.find((argument) => argument.startsWith('--resume-at='))?.split('=')[1];
+  const onlyMilestone = process.argv.find((argument) => argument.startsWith('--only-milestone='))?.split('=')[1];
+  if ([resumeAt, onlyMilestone].some((id) => id && !/^[A-K]$/.test(id))) throw new Error('Invalid milestone filter');
   for (const milestone of plan.milestones) {
+    if (resumeAt && milestone.id < resumeAt) continue;
+    if (onlyMilestone && milestone.id !== onlyMilestone) continue;
     const epic = ensureIssue(issues, `Epic: ${milestone.name}`, epicBody(milestone), ['epic', 'guardrail']);
-    ensureProjectItem(number, itemUrls, epic);
-    setIssueMilestone(epic, milestone.id);
-    setField(number, epic, 'Status', 'Backlog');
+    if (project) {
+      const epicItemId = ensureProjectItem(project, itemIds, epic);
+      setFields(project, epicItemId, [['Status', 'Backlog']]);
+    }
+    setIssueMilestone(epic, milestone.id, milestones);
     const children = [];
     for (const [storyIndex, story] of milestone.stories.entries()) {
       const storyLabels = ['story'];
       if (story.guardrails.some((id) => ['G0', 'G1', 'G9', 'G11', 'G12'].some((prefix) => id.startsWith(prefix)))) storyLabels.push('guardrail');
       if (story.title.includes('security reviewer')) storyLabels.push('security');
       if (milestone.id === 'I') storyLabels.push('evals');
-      const issue = ensureIssue(issues, story.title, issueBody(milestone, story, epic.number, storyIndex), storyLabels, epic.number);
-      ensureProjectItem(number, itemUrls, issue);
-      setField(number, issue, 'Priority', story.priority);
-      setField(number, issue, 'Size', story.size);
-      setIssueMilestone(issue, milestone.id);
-      setField(number, issue, 'Status', story.sprint === 1 ? 'Ready' : 'Backlog');
-      if (story.sprint) setIteration(number, issue, story.sprint, project);
+      const issue = ensureIssue(issues, story.title, issueBody(milestone, story, epic.number, storyIndex), storyLabels);
+      if (project) {
+        const itemId = ensureProjectItem(project, itemIds, issue);
+        setFields(project, itemId, [
+          ['Priority', story.priority],
+          ['Size', story.size],
+          ['Status', story.sprint === 1 ? 'Ready' : 'Backlog'],
+          ...(story.sprint ? [['Sprint', story.sprint]] : []),
+        ]);
+      }
+      setIssueMilestone(issue, milestone.id, milestones);
       children.push(issue);
     }
-    if (!epic.body?.includes(`- [ ] #${children[0].number}`)) {
-      gh(['issue', 'edit', String(epic.number), '--repo', repo, '--body-file', '-'], epicBody(milestone, children));
+    if (children.some((issue) => !epic.body?.includes(`- [ ] #${issue.number}`))) {
+      epic.body = epicBody(milestone, children);
+      api('PATCH', `repos/${repo}/issues/${epic.number}`, { body: epic.body });
     }
     process.stdout.write(`Milestone ${milestone.id}: ${children.length} linked stories\n`);
   }
-  process.stdout.write(`Project seeded: https://github.com/users/${owner}/projects/${number}\n`);
+  process.stdout.write(issuesOnly ? 'Issue plan seeded; Project cards remain to reconcile.\n'
+    : `Project seeded: https://github.com/users/${owner}/projects/${number}\n`);
 }
 
 main();
