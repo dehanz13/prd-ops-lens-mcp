@@ -1,5 +1,30 @@
 # prd-ops-lens-mcp
 
+<p align="center">
+  <a href="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml"><img alt="Latest pull request checks" src="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml/badge.svg?event=pull_request"></a>
+  <a href="#verification"><img alt="138 local tests passing" src="https://img.shields.io/badge/tests-138%20passing%20locally-brightgreen"></a>
+  <a href="#verification"><img alt="94.58 percent local line coverage" src="https://img.shields.io/badge/line%20coverage-94.58%25%20local-brightgreen"></a>
+  <a href="#verification"><img alt="Zero production dependency advisories in the local audit" src="https://img.shields.io/badge/production%20audit-0%20advisories%20local-brightgreen"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/dehanz13/prd-ops-lens-mcp"></a>
+</p>
+
+<hr>
+
+<p align="center">
+  <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js%2022-339933?style=for-the-badge&amp;logo=nodedotjs&amp;logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&amp;logo=typescript&amp;logoColor=white">
+  <img alt="MCP SDK v2" src="https://img.shields.io/badge/MCP-SDK%20v2-111827?style=for-the-badge">
+  <img alt="Grafana" src="https://img.shields.io/badge/Grafana-F2F4F9?style=for-the-badge&amp;logo=grafana&amp;logoColor=orange&amp;labelColor=F2F4F9">
+  <img alt="Prometheus" src="https://img.shields.io/badge/Prometheus-000000?style=for-the-badge&amp;logo=prometheus&amp;labelColor=000000">
+  <img alt="Loki" src="https://img.shields.io/badge/Loki-1F60C4?style=for-the-badge">
+  <br>
+  <img alt="Uptime Kuma" src="https://img.shields.io/badge/Uptime%20Kuma-5CDD8B?style=for-the-badge">
+  <img alt="AWS" src="https://img.shields.io/badge/Amazon_Web_Services-FF9900?style=for-the-badge&amp;logo=amazonwebservices&amp;logoColor=white">
+  <img alt="PostHog" src="https://img.shields.io/badge/posthog-232429?style=for-the-badge&amp;logo=posthog&amp;logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&amp;logo=docker&amp;logoColor=white">
+  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-%236E9F18?style=for-the-badge&amp;logo=Vitest&amp;logoColor=%23fcd703">
+</p>
+
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
 **Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, local incident correlation, local agent usage reports, and a Docker Desktop demo restart are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions.
@@ -18,20 +43,43 @@ flowchart LR
   Redaction --> Audit[Local JSONL audit]
 ```
 
-## Quickstart
+## Install locally
 
-Requires Node 22 or newer. With the example config, no provider is enabled.
+**Prerequisites:** A macOS or Linux computer (or Windows with WSL2), Node.js 22+ with npm, and Git. Plan for 4 GB RAM and 1 GB free disk for the local build; no GPU or cloud account is needed. Docker with Compose is optional for the synthetic demo. To use the server, your agent must support local stdio MCP servers.
 
-```sh
-npm ci --ignore-scripts
-cp config.example.yaml config.local.yaml
-npm run build
-OPS_LENS_CONFIG="$PWD/config.local.yaml" npm start
-```
+1. **Clone and build.**
 
-The process waits for MCP messages on standard input. Standard output is reserved for MCP messages. Keep token files and the audit output outside the public repository for real integrations. For a real config, set `OPS_LENS_CONFIG` to its absolute path outside the repo and use an owner-only Grafana Viewer token file. The server checks Grafana permissions before it registers Grafana tools; see [Grafana permissions](docs/permissions/grafana.md).
+   ```sh
+   git clone https://github.com/dehanz13/prd-ops-lens-mcp.git
+   cd prd-ops-lens-mcp
+   npm ci --ignore-scripts
+   npm run build
+   ```
 
-To try the synthetic stack on your local Docker context:
+2. **Create a private config.** The example starts with providers disabled, so no credential is needed yet.
+
+   ```sh
+   mkdir -p ~/.config/prd-ops-lens-mcp
+   cp config.example.yaml ~/.config/prd-ops-lens-mcp/config.yaml
+   chmod 700 ~/.config/prd-ops-lens-mcp
+   chmod 600 ~/.config/prd-ops-lens-mcp/config.yaml
+   ```
+
+   In that file, set `audit.path` to an absolute path in the same private directory before using real providers.
+
+3. **Add a stdio server in your agent's MCP settings.** Use `command -v node` for the Node path and `realpath` for the two file paths below.
+
+   | Setting | Value |
+   | --- | --- |
+   | Command | Output of `command -v node` |
+   | Argument | Output of `realpath dist/index.js` |
+   | Environment | `OPS_LENS_CONFIG` = output of `realpath ~/.config/prd-ops-lens-mcp/config.yaml` |
+
+   Restart the agent and call `server_status`. For real providers, enable only the ones you need in the private config and follow the relevant guide in [docs/permissions](docs/permissions). Keep tokens and the audit file outside the repository. The server checks credentials before exposing provider tools.
+
+### Optional synthetic demo
+
+To try the data tools without cloud credentials, start the local Docker stack:
 
 ```sh
 docker compose up -d --build
@@ -108,7 +156,7 @@ npm run secret-scan
 npm run smoke:demo
 ```
 
-The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 positive controls** in the local run on 2026-09-28. It replays ten handmade fault worlds through the MCP timeline tool and removes each case's key observation to check that scoring fails. This is an evidence availability score; model root-cause identification was not run. The fixture linter found zero violations in the synthetic fixtures and private denylist during local verification. CI runs its public pattern checks without the private file; the local exact-SHA gate requires the private check. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior; inspect hosted checks on the exact PR head separately.
+The test, coverage, and audit badges show the 2026-09-28 local snapshot; the CI badge shows the latest pull request workflow. The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 positive controls** in that local run. It replays ten handmade fault worlds through the MCP timeline tool and removes each case's key observation to check that scoring fails. This is an evidence availability score; model root-cause identification was not run. The fixture linter found zero violations in the synthetic fixtures and private denylist during local verification. CI runs its public pattern checks without the private file; the local exact-SHA gate requires the private check. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior; inspect hosted checks on the exact PR head separately.
 
 ## Roadmap
 
