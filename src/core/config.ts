@@ -75,6 +75,21 @@ export const ConfigSchema = z.strictObject({
         .refine((ids) => new Set(ids).size === ids.length, 'Project ids must be unique'),
     }).refine((value) => Number(Boolean(value.tokenEnv)) + Number(Boolean(value.tokenFile)) === 1,
       'Choose exactly one tokenEnv or tokenFile').optional(),
+    agentUsage: z.strictObject({
+      enabled: z.boolean().default(false),
+      files: z.array(absolutePath).min(1).max(20),
+      jobLabels: z.record(z.string(), z.string().regex(/^(?:PR-\d+|[A-Z][A-Z0-9]{1,15}-\d+)$/)).default({}),
+      jobKinds: z.record(z.string(), z.enum(['feature', 'bug', 'review', 'docs', 'ops', 'other'])).default({}),
+      priceTable: z.strictObject({
+        asOf: z.iso.date(),
+        models: z.record(z.string(), z.strictObject({
+          inputPerMillionUsd: z.number().nonnegative(),
+          outputPerMillionUsd: z.number().nonnegative(),
+          cacheReadPerMillionUsd: z.number().nonnegative(),
+          cacheWritePerMillionUsd: z.number().nonnegative(),
+        })),
+      }).optional(),
+    }).optional(),
   }).prefault({}),
   resources: z.strictObject({
     directory: absolutePath,

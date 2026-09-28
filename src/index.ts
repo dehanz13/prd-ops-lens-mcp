@@ -7,6 +7,7 @@ import { UptimeProvider } from './providers/uptime.js';
 import { CloudWatchProvider } from './providers/cloudwatch.js';
 import { IamProvider } from './providers/iam.js';
 import { PostHogProvider } from './providers/posthog.js';
+import { AgentUsageProvider } from './providers/agent-usage.js';
 
 const path = process.env.OPS_LENS_CONFIG;
 if (!path) {
@@ -19,11 +20,13 @@ if (!path) {
     const cloudwatch = new CloudWatchProvider();
     const iam = new IamProvider();
     const posthog = new PostHogProvider();
+    const agentUsage = new AgentUsageProvider();
     await grafana.preflight(config);
     await cloudwatch.preflight(config);
     await iam.preflight(config);
     await posthog.preflight(config);
-    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch, iam, posthog]));
+    agentUsage.preflight(config);
+    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch, iam, posthog, agentUsage]));
   } catch {
     process.stderr.write('Configuration could not be loaded; check the file path and schema.\n');
     process.exitCode = 1;

@@ -45,6 +45,11 @@ implemented, so each milestone can end with a green build.
 | G8.3 | Prompts preserve untrusted-data and read-only guidance | `test/resources-prompts.test.ts` |
 | G10.1 | Synthetic fixture policy rejects identities, non-doc addresses, and credential-like data | `test/evals.test.ts` |
 | G10.2 | Each replay has a missing-evidence positive control | `test/evals.test.ts` |
+| G12.1 | Transcript parser projects usage metadata only and excludes planted content | `test/agent-usage.test.ts` |
+| G12.2 | Job labels use an explicit mapping or session-ID hash | `test/agent-usage.test.ts` |
+| G12.3 | Optional PostHog event projection contains numeric fields and safe labels only | `test/agent-usage.test.ts` |
+| G12.4 | Optional OTel export is not configured; guidance requires content logging off and a separate write-only token | `test/agent-usage.test.ts` |
+| G12.5 | No Anthropic Admin API credential path by default | `test/agent-usage.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |
