@@ -24,6 +24,7 @@ afterEach(() => {
 const redactionConfig = {
   identityKeys: ['playerId'],
   identityLabels: ['room', 'player'],
+  identityValues: [],
 };
 
 describe('configuration', () => {
@@ -31,7 +32,8 @@ describe('configuration', () => {
     const file = temporaryFile('config.yaml');
     writeFileSync(file, `version: 1\naudit:\n  path: ${temporaryFile('audit.jsonl')}\n`);
     const config = loadConfig(file);
-    expect(config.limits).toEqual({ maxWindowMinutes: 60, maxRows: 1000, timeoutMs: 10000 });
+    expect(config.limits).toEqual({ maxWindowMinutes: 60, maxRows: 1000, maxOutputBytes: 65_536,
+      maxConcurrentProviderCalls: 2, timeoutMs: 20000 });
     expect(config.writes).toEqual({ enabled: false, demoOnly: true, containers: [] });
   });
 

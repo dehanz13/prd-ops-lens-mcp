@@ -8,6 +8,7 @@ const answer = {
     query: 'errors for service-a',
     window: { from: '2026-01-01T00:00:00.000Z', to: '2026-01-01T01:00:00.000Z' },
     rowCount: 0,
+    scannedCount: 0,
     byteCount: 0,
     lineCount: 0,
     truncated: false,

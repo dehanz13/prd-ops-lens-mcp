@@ -16,7 +16,9 @@
     "test": "vitest run --coverage",
     "test:unit": "vitest run",
     "evals": "node --import tsx evals/run.ts",
-    "check": "npm run lint && npm run typecheck && npm test && npm run evals",
+    "guardrails": "node scripts/check-guardrails.mjs",
+    "sbom": "npm sbom --package-lock-only --sbom-format cyclonedx",
+    "check": "npm run lint && npm run typecheck && npm test && npm run evals && npm run guardrails",
     "secret-scan": "gitleaks git . --no-banner --redact",
     "start": "node dist/index.js"
   },

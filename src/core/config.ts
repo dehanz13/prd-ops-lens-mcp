@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
@@ -19,11 +19,14 @@ export const ConfigSchema = z.strictObject({
   redaction: z.strictObject({
     identityKeys: z.array(z.string().min(1)).default(['userId', 'playerId', 'sessionId', 'accountId']),
     identityLabels: z.array(z.string().min(1)).default(['user', 'player', 'session', 'room', 'account']),
+    identityValues: z.array(z.string().min(1)).default([]),
   }).prefault({}),
   limits: z.strictObject({
     maxWindowMinutes: z.number().int().min(1).max(1440).default(60),
     maxRows: z.number().int().min(1).max(1000).default(1000),
-    timeoutMs: z.number().int().min(1000).max(30000).default(10000),
+    maxOutputBytes: z.number().int().min(1024).max(1_048_576).default(65_536),
+    maxConcurrentProviderCalls: z.number().int().min(1).max(8).default(2),
+    timeoutMs: z.number().int().min(1000).max(30000).default(20000),
   }).prefault({}),
   providers: z.strictObject({
     grafana: z.strictObject({
@@ -63,5 +66,16 @@ export function providerToken(envName: string, env: NodeJS.ProcessEnv = process.
   if (!value) {
     throw new Error(`Missing provider token in environment variable ${envName}`);
   }
+  return value;
+}
+
+/** Read an owner-only credential file without including its value in errors. */
+export function readPrivateCredentialFile(path: string): string {
+  const status = lstatSync(path);
+  if (!status.isFile() || status.uid !== process.getuid?.() || (status.mode & 0o077) !== 0) {
+    throw new Error('Credential file must be an owner-only regular file');
+  }
+  const value = readFileSync(path, 'utf8').trim();
+  if (!value) throw new Error('Credential file is empty');
   return value;
 }

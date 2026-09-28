@@ -3,8 +3,9 @@ import { z } from 'zod';
 export const ExaminedSchema = z.strictObject({
   provider: z.string().min(1),
   query: z.string().min(1),
-  window: z.strictObject({ from: z.iso.datetime(), to: z.iso.datetime() }).nullable(),
+  window: z.strictObject({ from: z.iso.datetime(), to: z.iso.datetime() }),
   rowCount: z.number().int().nonnegative(),
+  scannedCount: z.number().int().nonnegative(),
   byteCount: z.number().int().nonnegative().nullable(),
   lineCount: z.number().int().nonnegative().nullable(),
   truncated: z.boolean(),
@@ -20,11 +21,13 @@ export type Examined = z.output<typeof ExaminedSchema>;
 export type ToolResult<T = unknown> = { data: T; examined: Examined };
 
 export function examined(provider: string, query: string, overrides: Partial<Examined> = {}): Examined {
+  const now = new Date().toISOString();
   return ExaminedSchema.parse({
     provider,
     query,
-    window: null,
+    window: { from: now, to: now },
     rowCount: 0,
+    scannedCount: overrides.rowCount ?? 0,
     byteCount: null,
     lineCount: null,
     truncated: false,

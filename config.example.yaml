@@ -4,10 +4,13 @@ audit:
 redaction:
   identityKeys: [userId, playerId, sessionId]
   identityLabels: [user, player, session, room]
+  identityValues: []
 limits:
   maxWindowMinutes: 60
   maxRows: 1000
-  timeoutMs: 10000
+  maxOutputBytes: 65536
+  maxConcurrentProviderCalls: 2
+  timeoutMs: 20000
 providers:
   grafana:
     enabled: false
