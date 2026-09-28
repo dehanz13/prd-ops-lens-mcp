@@ -41,6 +41,14 @@ docker compose down
 
 The smoke test checks the demo services and calls the MCP dashboard, metric, and log tools over stdio. The demo API continuously emits synthetic metrics and logs, so returned row counts vary over time.
 
+To exercise the real demo Kuma, open `http://127.0.0.1:3001` and finish its
+first-run setup with a local admin credential. Add an HTTP monitor named
+`Synthetic demo API` for `http://demo-api:8080/health`, then publish a status
+page with slug `demo` containing that monitor. Run `npm run smoke:demo:uptime`.
+The admin credential stays in the local Kuma volume; the MCP provider accesses
+only the page's public JSON. If no page is published yet, the tool returns
+`not_published`.
+
 ## Tool catalog
 
 | Tool | Current state | What it examines |
