@@ -95,7 +95,8 @@ export const ConfigSchema = z.strictObject({
   resources: z.strictObject({
     directory: absolutePath,
     systemMap: resourceName.optional(),
-    runbooks: z.array(resourceName).max(20).default([]),
+    runbooks: z.array(resourceName).max(20)
+      .refine((names) => new Set(names).size === names.length, 'Runbooks must be unique').default([]),
   }).optional(),
   writes: z.strictObject({
     enabled: z.boolean().default(false),
@@ -111,7 +112,10 @@ export const ConfigSchema = z.strictObject({
 export type Config = z.output<typeof ConfigSchema>;
 
 export function loadConfig(path: string, env: NodeJS.ProcessEnv = process.env): Config {
-  const document = parseDocument(readFileSync(path, 'utf8'), { uniqueKeys: true });
+  const descriptor = openPrivateFile(path, 'Configuration');
+  let source: string;
+  try { source = readFileSync(descriptor, 'utf8'); } finally { closeSync(descriptor); }
+  const document = parseDocument(source, { uniqueKeys: true });
   if (document.errors.length > 0) {
     throw new Error('Configuration YAML is invalid');
   }
@@ -132,7 +136,7 @@ export function providerToken(envName: string, env: NodeJS.ProcessEnv = process.
 
 /** Read an owner-only credential file without including its value in errors. */
 export function readPrivateCredentialFile(path: string): string {
-  const descriptor = openPrivateCredentialFile(path);
+  const descriptor = openPrivateFile(path, 'Credential');
   let value: string;
   try {
     value = readFileSync(descriptor, 'utf8').trim();
@@ -144,28 +148,30 @@ export function readPrivateCredentialFile(path: string): string {
 }
 
 export function assertPrivateCredentialFile(path: string): void {
-  closeSync(openPrivateCredentialFile(path));
+  closeSync(openPrivateFile(path, 'Credential'));
 }
 
-function openPrivateCredentialFile(path: string): number {
+function openPrivateFile(path: string, kind: string): number {
+  const failure = `${kind} file must be an owner-only regular file`;
   if (typeof constants.O_NOFOLLOW !== 'number') {
-    throw new Error('Credential file must be an owner-only regular file');
+    throw new Error(failure);
   }
   let descriptor: number;
   try {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch {
-    throw new Error('Credential file must be an owner-only regular file');
+    throw new Error(failure);
   }
   try {
     const status = fstatSync(descriptor);
-    if (!status.isFile() || status.uid !== process.getuid?.() || (status.mode & 0o077) !== 0) {
-      throw new Error('Credential file must be an owner-only regular file');
+    if (!status.isFile() || status.nlink !== 1 || status.uid !== process.getuid?.() ||
+      (status.mode & 0o077) !== 0) {
+      throw new Error(failure);
     }
     return descriptor;
   } catch {
     closeSync(descriptor);
-    throw new Error('Credential file must be an owner-only regular file');
+    throw new Error(failure);
   }
 }
 

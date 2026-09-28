@@ -139,6 +139,9 @@ export class CloudWatchProvider implements ProviderModule {
 
   private async logs(ctx: Context, input: z.output<typeof logsInput>): Promise<ToolResult> {
     checkWindow(input.from, input.to, Math.min(ctx.cloudwatch.maxLogWindowMinutes, 1440));
+    if (Date.parse(input.from) % 1000 !== 0 || Date.parse(input.to) % 1000 !== 0) {
+      throw new OpsError('QUERY_LIMIT', 'CloudWatch log window must use whole UTC seconds');
+    }
     if (input.logGroups.some((group) => !ctx.cloudwatch.logGroups.includes(group)) ||
       new Set(input.logGroups).size !== input.logGroups.length) {
       throw new OpsError('QUERY_LIMIT', 'CloudWatch log group is not on the configured allowlist');

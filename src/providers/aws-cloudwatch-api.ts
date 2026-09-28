@@ -163,6 +163,9 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
 
   async startLogs(groups: string[], from: string, to: string, query: string, limit: number,
     timeoutMs: number): Promise<string> {
+    if (Date.parse(from) % 1000 !== 0 || Date.parse(to) % 1000 !== 0) {
+      throw new OpsError('QUERY_LIMIT', 'CloudWatch log window must use whole UTC seconds');
+    }
     const response = await this.logsClient.send(new StartQueryCommand({
       queryLanguage: 'CWLI', logGroupNames: groups,
       startTime: Math.floor(Date.parse(from) / 1000), endTime: Math.floor(Date.parse(to) / 1000),

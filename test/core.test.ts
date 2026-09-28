@@ -32,7 +32,7 @@ const redactionConfig = {
 describe('configuration', () => {
   it('loads a minimal config and applies conservative defaults', () => {
     const file = temporaryFile('config.yaml');
-    writeFileSync(file, `version: 1\naudit:\n  path: ${temporaryFile('audit.jsonl')}\n`);
+    writeFileSync(file, `version: 1\naudit:\n  path: ${temporaryFile('audit.jsonl')}\n`, { mode: 0o600 });
     const config = loadConfig(file);
     expect(config.limits).toEqual({ maxWindowMinutes: 60, maxRows: 1000, maxOutputBytes: 65_536,
       maxConcurrentProviderCalls: 2, maxResponseBytes: 2_000_000,
@@ -50,11 +50,29 @@ describe('configuration', () => {
 
   it('rejects duplicate YAML keys and write enablement without the startup flag', () => {
     const file = temporaryFile('config.yaml');
-    writeFileSync(file, `version: 1\nversion: 1\naudit: {path: /tmp/audit.jsonl}\n`);
+    writeFileSync(file, `version: 1\nversion: 1\naudit: {path: /tmp/audit.jsonl}\n`, { mode: 0o600 });
     expect(() => loadConfig(file)).toThrow('Configuration YAML is invalid');
     writeFileSync(file, `version: 1\naudit: {path: /tmp/audit.jsonl}\nwrites: {enabled: true}\n`);
     expect(() => loadConfig(file, {})).toThrow('OPS_LENS_ENABLE_WRITES');
     expect(loadConfig(file, { OPS_LENS_ENABLE_WRITES: '1' }).writes.enabled).toBe(true);
+  });
+
+  it('refuses exposed, linked, and duplicate-resource configuration', () => {
+    const file = temporaryFile('private-config.yaml');
+    const source = `version: 1\naudit: {path: /tmp/synthetic-audit}\n`;
+    writeFileSync(file, source, { mode: 0o600 });
+    const link = temporaryFile('config-link.yaml');
+    symlinkSync(file, link);
+    expect(() => loadConfig(link)).toThrow('owner-only');
+    const hardlink = temporaryFile('config-hardlink.yaml');
+    linkSync(file, hardlink);
+    expect(() => loadConfig(file)).toThrow('owner-only');
+    rmSync(hardlink);
+    chmodSync(file, 0o644);
+    expect(() => loadConfig(file)).toThrow('owner-only');
+    expect(() => ConfigSchema.parse({ version: 1, audit: { path: '/tmp/synthetic-audit' },
+      resources: { directory: '/tmp', runbooks: ['same.md', 'same.md'] },
+    })).toThrow('Runbooks must be unique');
   });
 
   it('reads a token only from its named environment variable', () => {

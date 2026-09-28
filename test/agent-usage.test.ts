@@ -1,8 +1,17 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { appendFileSync, chmodSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdtempSync, readFileSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+const fileRace = vi.hoisted(() => ({ path: '', replace: undefined as undefined | (() => void) }));
+vi.mock('node:fs', async (load) => {
+  const actual = await load<typeof import('node:fs')>();
+  return { ...actual, lstatSync: (path: string) => {
+    const status = actual.lstatSync(path);
+    if (path === fileRace.path) fileRace.replace?.();
+    return status;
+  } };
+});
 import { ConfigSchema } from '../src/core/config.js';
 import { AgentUsageProvider, parseUsageFile, usagePostHogEvent,
   usageReport, usageTrend, type UsageJob } from '../src/providers/agent-usage.js';
@@ -34,6 +43,8 @@ function syntheticFiles() {
   ].map((entry) => JSON.stringify(entry)).join('\n'), { mode: 0o600 });
   return { directory, codex, claude, planted };
 }
+
+afterEach(() => { fileRace.path = ''; fileRace.replace = undefined; });
 
 function config(files: string[], price = true) {
   return ConfigSchema.parse({ version: 1,
@@ -118,6 +129,18 @@ it('refuses exposed or linked transcript files before registering tools', () => 
   const link = join(files.directory, 'linked.jsonl');
   symlinkSync(files.claude, link);
   expect(() => new AgentUsageProvider().preflight(config([link]))).toThrow('owner-only');
+});
+
+it('refuses a private transcript replaced between pathname check and open', async () => {
+  const files = syntheticFiles();
+  fileRace.path = files.codex;
+  fileRace.replace = () => {
+    fileRace.replace = undefined;
+    renameSync(files.codex, `${files.codex}.original`);
+    writeFileSync(files.codex, '{}\n', { mode: 0o600 });
+  };
+  await expect(parseUsageFile(files.codex, config([files.codex]).providers.agentUsage!))
+    .rejects.toThrow('changed after its file check');
 });
 
 // @guardrail G12.3: a possible PostHog projection carries only safe labels and numeric fields.

@@ -133,3 +133,15 @@ it('caps response bytes and refuses a non-Desktop daemon over the real transport
   })));
   await expect(wrong.api.identity()).rejects.toMatchObject({ code: 'REFUSED' });
 });
+
+it('does not follow redirects from the demo health endpoint', async () => {
+  const { api } = await fixture((_request, response) => response.end('{}'));
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, {
+    status: 302, headers: { location: 'https://example.invalid/health' },
+  }));
+  try {
+    expect(await api.health()).toBe('unknown');
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:8088/health',
+      expect.objectContaining({ redirect: 'manual' }));
+  } finally { fetch.mockRestore(); }
+});

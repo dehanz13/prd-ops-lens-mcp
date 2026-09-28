@@ -57,9 +57,13 @@ export function emit(
     if (Buffer.byteLength(`${UNTRUSTED_DATA_NOTICE}\n${JSON.stringify(safe)}`) + evidenceReserve > maxBytes) {
       safe = {
         data: { message: 'Output exceeded the configured size cap; narrow the query' },
-        examined: { ...safe.examined, query: safe.examined.query.slice(0, 200), rowCount: 0,
-          truncated: true, warnings: ['Output size cap applied'] },
+        examined: examined(safe.examined.provider.slice(0, 80), safe.examined.query.slice(0, 80), {
+          window: safe.examined.window, truncated: true, warnings: ['Output size cap applied'],
+        }),
       };
+      if (Buffer.byteLength(`${UNTRUSTED_DATA_NOTICE}\n${JSON.stringify(safe)}`) + evidenceReserve > maxBytes) {
+        throw new Error('Output cap cannot fit the minimum result envelope');
+      }
     }
   } catch {
     actualOutcome = 'error';

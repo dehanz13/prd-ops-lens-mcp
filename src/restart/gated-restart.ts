@@ -97,6 +97,7 @@ export class RestartGate {
         throw new OpsError('REFUSED', 'Confirmation target or host changed');
       }
       const before = await this.api.health();
+      this.guard(input.container);
       try {
         await this.api.restart(target.id);
         this.recent.set(target.id, this.clock());

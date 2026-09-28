@@ -8,7 +8,7 @@ import { expect, it } from 'vitest';
 it('starts as a child process and answers over stdio', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ops-lens-stdio-'));
   const configPath = join(dir, 'config.yaml');
-  writeFileSync(configPath, `version: 1\naudit:\n  path: ${join(dir, 'audit.jsonl')}\n`);
+  writeFileSync(configPath, `version: 1\naudit:\n  path: ${join(dir, 'audit.jsonl')}\n`, { mode: 0o600 });
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: ['--import', 'tsx', 'src/index.ts'],

@@ -154,8 +154,11 @@ export class DockerDesktopDemoApi implements DemoRestartApi {
 
   async health(): Promise<'healthy' | 'unhealthy' | 'unknown'> {
     try {
-      const response = await fetch('http://127.0.0.1:8088/health', { signal: AbortSignal.timeout(3000) });
-      return response.ok ? 'healthy' : 'unhealthy';
+      const response = await fetch('http://127.0.0.1:8088/health', {
+        redirect: 'manual', signal: AbortSignal.timeout(3000),
+      });
+      return response.status >= 300 && response.status < 400 ? 'unknown' :
+        response.ok ? 'healthy' : 'unhealthy';
     } catch { return 'unknown'; }
   }
 

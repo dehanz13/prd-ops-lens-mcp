@@ -25,11 +25,12 @@ Requires Node 22 or newer. With the example config, no provider is enabled.
 ```sh
 npm ci --ignore-scripts
 cp config.example.yaml config.local.yaml
+chmod 600 config.local.yaml
 npm run build
 OPS_LENS_CONFIG="$PWD/config.local.yaml" npm start
 ```
 
-The process waits for MCP messages on standard input. Standard output is reserved for MCP messages. Keep token files and the audit output outside the public repository for real integrations. For a real config, set `OPS_LENS_CONFIG` to its absolute path outside the repo and use an owner-only Grafana Viewer token file. The server checks Grafana permissions before it registers Grafana tools; see [Grafana permissions](docs/permissions/grafana.md).
+The process waits for MCP messages on standard input. Standard output is reserved for MCP messages. Keep the config, token files, and audit output outside the public repository for real integrations. The config and token files must be owner-only regular files (`chmod 600`) with no links. Set `OPS_LENS_CONFIG` to the private config's absolute path. The server checks Grafana permissions before it registers Grafana tools; see [Grafana permissions](docs/permissions/grafana.md).
 
 To try the synthetic stack on your local Docker context:
 

@@ -118,6 +118,19 @@ describe('CloudWatch read boundary', () => {
     } finally { await fixture.close(); }
   });
 
+  it('refuses fractional-second log windows before StartQuery', async () => {
+    const api = new FakeCloudWatch();
+    const fixture = await harness(api);
+    try {
+      const result = await fixture.client.callTool({ name: 'cloudwatch_logs_insights', arguments: {
+        from: '2026-01-01T00:00:00.500Z', to, logGroups: ['/demo/allowed'],
+        query: 'fields @message | limit 1',
+      } });
+      expect(result.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
+      expect(api.calls).not.toContain('StartQuery');
+    } finally { await fixture.close(); }
+  });
+
   // @guardrail G4.3: bounded query text, time, scan accounting and StopQuery on refusal.
   it('requires a terminal limit and reports scanned bytes when it stops an over-cap query', async () => {
     expect(() => cloudWatchLogLimit('fields @message')).toThrow('must end');

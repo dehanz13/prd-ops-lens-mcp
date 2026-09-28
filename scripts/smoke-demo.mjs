@@ -18,7 +18,7 @@ for (const [name, url] of probes) {
 
 const dir = mkdtempSync(join(tmpdir(), 'ops-lens-demo-smoke-'));
 const configPath = join(dir, 'config.yaml');
-writeFileSync(configPath, `version: 1\naudit:\n  path: ${join(dir, 'audit.jsonl')}\nproviders:\n  grafana:\n    enabled: true\n    baseUrl: http://127.0.0.1:3000\n    prometheusUid: demo-prometheus\n    lokiUid: demo-loki\n`);
+writeFileSync(configPath, `version: 1\naudit:\n  path: ${join(dir, 'audit.jsonl')}\nproviders:\n  grafana:\n    enabled: true\n    baseUrl: http://127.0.0.1:3000\n    prometheusUid: demo-prometheus\n    lokiUid: demo-loki\n`, { mode: 0o600 });
 const client = new Client({ name: 'demo-smoke', version: '1.0.0' });
 const transport = new StdioClientTransport({
   command: process.execPath,
