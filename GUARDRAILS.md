@@ -43,6 +43,11 @@ implemented, so each milestone can end with a green build.
 | G8.1 | Cited client-supplied evidence, ordered events, unknown missing sources | `test/timeline.test.ts` |
 | G8.2 | Explicit owner-only resources confined to configured directory | `test/resources-prompts.test.ts` |
 | G8.3 | Prompts preserve untrusted-data and read-only guidance | `test/resources-prompts.test.ts` |
+| G9.1 | Demo write startup flag, exact allowlist, and absent kill switch | `test/restart.test.ts` |
+| G9.2 | Two-step, single-use, two-minute host and target-bound confirmation | `test/restart.test.ts` |
+| G9.3 | Self-target, deploy lock, non-allowlisted name, and durable cooldown refusals | `test/restart.test.ts` |
+| G9.4 | Before and after health plus audited refusals | `test/restart.test.ts` |
+| G9.5 | Negative gate controls and untrusted-result instruction cannot restart | `test/restart.test.ts` |
 | G10.1 | Synthetic fixture policy rejects identities, non-doc addresses, and credential-like data | `test/evals.test.ts` |
 | G10.2 | Each replay has a missing-evidence positive control | `test/evals.test.ts` |
 | G12.1 | Transcript parser projects usage metadata only and excludes planted content | `test/agent-usage.test.ts` |

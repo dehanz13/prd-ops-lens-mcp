@@ -99,7 +99,11 @@ export const ConfigSchema = z.strictObject({
   writes: z.strictObject({
     enabled: z.boolean().default(false),
     demoOnly: z.literal(true).default(true),
-    containers: z.array(z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/)).default([]),
+    containers: z.array(z.literal('demo-api')).max(1).default([]),
+    dockerSocket: absolutePath.optional(),
+    expectedDaemonId: z.string().regex(/^[A-Za-z0-9:_.-]{8,128}$/).optional(),
+    killSwitchFile: absolutePath.optional(),
+    deployLockFile: absolutePath.optional(),
   }).prefault({}),
 });
 

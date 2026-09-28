@@ -23,6 +23,7 @@
     "secret-scan": "gitleaks git . --no-banner --redact",
     "smoke:demo": "npm run build && node scripts/smoke-demo.mjs",
     "smoke:demo:uptime": "npm run build && node scripts/smoke-uptime-demo.mjs",
+    "smoke:demo:restart": "npm run build && node scripts/smoke-demo-restart.mjs",
     "demo:record": "npm run build && node scripts/record-demo.mjs",
     "start": "node dist/index.js"
   },

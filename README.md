@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, local incident correlation, and local agent usage reports are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data for the demo. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Hosted CI and the guarded demo restart remain pending.
+**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, local incident correlation, local agent usage reports, and a Docker Desktop demo restart are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Hosted CI remains blocked by account billing.
 
 ## The examined principle
 
@@ -67,9 +67,9 @@ only the page's public JSON. If no page is published yet, the tool returns
 | Hostinger | Excluded from v1 | Personal tokens cannot prove zero write access |
 | `incident_timeline` | Implemented locally | Orders events from supplied tool results, cites each `examined` block, and marks absent expected sources unknown |
 | `agent_usage_report`, `agent_usage_trend` | Implemented locally | Numeric usage fields from explicitly configured owner-only Codex and Claude transcript files; safe job labels, estimates, and weekly benchmarks |
-| `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
+| `plan_restart`, `restart_container` | Implemented for the local Docker Desktop demo only | Exact allowlist, two-minute single-use confirmation, kill and deploy locks, cooldown, before and after health, and audit |
 
-Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
+Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. The [demo restart guide](docs/permissions/demo-restart.md) explains its separate startup flag and local host gates.
 
 ## Security model
 
@@ -114,6 +114,6 @@ The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 posi
 
 1. Validate CloudWatch and IAM against supplied, independently reviewed read-only profiles.
 2. Validate PostHog with a project-scoped read-only key; verify host and container exporters after an operator deploys them.
-3. Prove the gated demo restart and prepare a release after hosted CI recovers. Optional usage exports require separately scoped credentials and privacy checks.
+3. Prepare a release after hosted CI recovers. Optional usage exports require separately scoped credentials and privacy checks.
 
 See [SECURITY.md](SECURITY.md) and the [threat model](docs/threat-model.md) for reporting and trust boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) for the local check sequence.

@@ -8,6 +8,7 @@ import { CloudWatchProvider } from './providers/cloudwatch.js';
 import { IamProvider } from './providers/iam.js';
 import { PostHogProvider } from './providers/posthog.js';
 import { AgentUsageProvider } from './providers/agent-usage.js';
+import { DemoRestartProvider } from './restart/gated-restart.js';
 
 const path = process.env.OPS_LENS_CONFIG;
 if (!path) {
@@ -21,12 +22,14 @@ if (!path) {
     const iam = new IamProvider();
     const posthog = new PostHogProvider();
     const agentUsage = new AgentUsageProvider();
+    const restart = new DemoRestartProvider();
     await grafana.preflight(config);
     await cloudwatch.preflight(config);
     await iam.preflight(config);
     await posthog.preflight(config);
     agentUsage.preflight(config);
-    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch, iam, posthog, agentUsage]));
+    await restart.preflight(config);
+    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch, iam, posthog, agentUsage, restart]));
   } catch {
     process.stderr.write('Configuration could not be loaded; check the file path and schema.\n');
     process.exitCode = 1;

@@ -69,3 +69,8 @@ writes:
   enabled: false
   demoOnly: true
   containers: []
+  # For a local Docker Desktop demo only, see docs/permissions/demo-restart.md.
+  # dockerSocket: /absolute/path/to/.docker/run/docker.sock
+  # expectedDaemonId: local-demo-host-id
+  # killSwitchFile: /private/path/to/ops-lens-demo.kill
+  # deployLockFile: /private/path/to/ops-lens-demo.deploy-lock
