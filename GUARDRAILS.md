@@ -38,7 +38,7 @@ implemented, so each milestone can end with a green build.
 | G6.2 | Identity-safe projections; no recording or console route | `test/posthog.test.ts` |
 | G6.3 | Exact project allowlist and key scope binding | `test/posthog.test.ts` |
 | G7.1 | No Hostinger API provider or owner-scoped token path | `test/host-health.test.ts` |
-| G7.4 | Demo node exporter metrics read through Grafana only | `test/host-health.test.ts` |
+| G7.4 | Demo node exporter metrics read through Grafana only | `test/grafana.test.ts` |
 | G7.5 | Reachability from public Kuma status JSON; missing page is not healthy | `test/uptime.test.ts` |
 | G8.1 | Server-issued evidence IDs, ordered events, unknown missing sources | `test/timeline.test.ts` |
 | G8.2 | Explicit owner-only resources confined to configured directory | `test/resources-prompts.test.ts` |

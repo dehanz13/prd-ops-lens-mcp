@@ -1,15 +1,19 @@
 # Host and container health without a Hostinger token
 
 Hostinger personal API tokens inherit the owning user's permissions. This
-server has no Hostinger API provider or SSH path in v1. The G1 check rejects a
-personal token even if external metadata labels it `vps:read`: that label does
-not prove the credential cannot write. A future provider would require a
+server has no Hostinger API provider or SSH path in v1. The configuration
+schema rejects a Hostinger provider before any token is loaded. A G1 policy
+test also proves `checkHostingerScopes` refuses a personal token even if
+external metadata labels it `vps:read`: that label does not prove the credential
+cannot write. A future provider would require a
 verifiably scoped read-only credential and its own startup check.
 
-The supported host path is Prometheus data read through Grafana's
+The supported metrics path is Prometheus data read through Grafana's
 `/api/ds/query`, after Grafana's zero-write permission check. The local demo
-scrapes its own node exporter as job `node-exporter`. On Docker Desktop the
-exporter observes the Linux VM used by the demo, not the physical laptop.
+scrapes its own node exporter as job `node-exporter`. On Docker Desktop it
+observes the demo's Linux environment, not the physical laptop or VPS. Its
+filesystem and network collectors are container-scoped in the current Compose
+configuration; do not call those values host disk or host network health.
 
 Example bounded instant queries for the demo:
 
@@ -18,15 +22,18 @@ Example bounded instant queries for the demo:
 | Load | `node_load1{job="node-exporter"}` |
 | Available memory | `node_memory_MemAvailable_bytes{job="node-exporter"}` |
 | CPU idle rate | `avg(rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m]))` |
-| Root filesystem free bytes | `node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"}` |
-| Receive bytes per second | `sum(rate(node_network_receive_bytes_total{job="node-exporter",device!="lo"}[5m]))` |
+| Demo container filesystem free bytes | `node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"}` |
+| Demo container receive bytes per second | `sum(rate(node_network_receive_bytes_total{job="node-exporter",device!="lo"}[5m]))` |
 
 Call `prometheus_instant` with one expression at a time. For a trend, use
 `prometheus_range` with a UTC window no longer than the configured cap and a
 step of at least 60 seconds. Empty results mean the metric is unknown, not
 healthy. Use the `examined` counts and window when reporting the finding.
 
-Container metrics are pending in the demo and live environment. When an Alloy
+VPS host metrics require the founder's Alloy Unix exporter with access to the
+host namespaces. Verify the new `node_*` series and exporter provenance before
+describing them as VPS health. Container metrics are pending in the demo and
+live environment. When an Alloy
 `prometheus.exporter.cadvisor` source is available, inspect bounded
 `container_cpu_usage_seconds_total` and `container_memory_usage_bytes` series
 through the same Grafana tool. Do not infer container health from a missing

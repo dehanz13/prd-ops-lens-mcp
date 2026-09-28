@@ -117,6 +117,22 @@ it('redacts a bare monitor hostname wherever a public label repeats it', async (
   } finally { await fixture.close(); }
 });
 
+it('keeps numeric versions while scrubbing hostnames from labels', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
+    config: { published: true },
+    publicGroupList: [{ name: 'Release v2.1 at 99.9%', monitorList: [
+      { id: 7, name: 'API node.private.example' }] }], incidents: [],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    const content = JSON.stringify(result);
+    expect(content).toContain('v2.1');
+    expect(content).toContain('99.9');
+    expect(content).not.toContain('node.private.example');
+  } finally { await fixture.close(); }
+});
+
 it('returns not_published for an explicitly unpublished page', async () => {
   mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
     config: { published: false }, incidents: [], publicGroupList: null,
@@ -126,6 +142,31 @@ it('returns not_published for an explicitly unpublished page', async () => {
     const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
     expect(result.structuredContent).toMatchObject({ data: { state: 'not_published', monitors: [] },
       examined: { rowCount: 0 } });
+  } finally { await fixture.close(); }
+});
+
+it('treats an empty published page as unknown rather than monitor health', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
+    config: { published: true }, publicGroupList: [], incidents: [],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({ data: { state: 'unknown', monitors: [] } });
+  } finally { await fixture.close(); }
+});
+
+it('treats a future-dated heartbeat as unknown', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/heartbeat/demo`, () => {
+    const response = structuredClone(heartbeatFixture.response);
+    response.heartbeatList['7'][1]!.time = new Date(Date.now() + 60_000).toISOString();
+    return HttpResponse.json(response);
+  }));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    const monitors = (result.structuredContent as { data: { monitors: Array<{ state: string }> } }).data.monitors;
+    expect(monitors[0]?.state).toBe('unknown');
   } finally { await fixture.close(); }
 });
 

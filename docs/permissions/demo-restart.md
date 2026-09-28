@@ -9,7 +9,7 @@ inspects the fixed Compose target `ops-lens-demo-demo-api-1`. It cannot select a
 remote Docker host, arbitrary container, or another endpoint.
 
 The private config also names a kill-switch file and deploy-lock file. The
-server refuses to start its write provider while either exists, and checks
+server starts without the restart tools while either exists, and checks
 both again at plan and confirmation time. Creating either file during a session
 blocks a pending confirmation. The user can create the kill-switch file before
 starting the server or at any later time. Both paths must stay outside the
@@ -19,7 +19,9 @@ A plan reports the local demo target, its current health, last start time,
 and a confirmation that expires in two minutes. The confirmation is bound to
 the daemon ID, container ID, random nonce, and expiry. Confirmation requires
 that token, the exact target name, and a written reason of at least ten
-characters. It is consumed on the first attempt, including a refusal. A
+characters. A well-formed confirmation attempt consumes it on entry to the
+gate, including a later refusal. Invalid arguments rejected before the gate
+do not consume it. A
 changed host or target, a deploy lock, a self-target, or a restart within ten
 minutes is refused. The ten-minute check uses Docker's last start time, so it
 survives an MCP process restart. It also conservatively blocks a first restart

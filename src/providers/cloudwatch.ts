@@ -104,7 +104,7 @@ export class CloudWatchProvider implements ProviderModule {
     if (steps > ctx.config.limits.maxRows) throw new OpsError('QUERY_LIMIT', 'CloudWatch point cap exceeded');
     const result = await ctx.api.metric({ ...input, maxPoints: steps });
     return { data: result.points.slice(0, ctx.config.limits.maxRows),
-      examined: examined('cloudwatch', 'GetMetricData', {
+      examined: examined('cloudwatch', `GetMetricData ${input.namespace}/${input.metricName} ${input.statistic} ${input.periodSeconds}s`, {
         window: { from: input.from, to: input.to }, rowCount: Math.min(result.points.length, ctx.config.limits.maxRows),
         scannedCount: result.points.length, truncated: result.partial || result.points.length > ctx.config.limits.maxRows,
         warnings: result.partial ? ['CloudWatch returned partial metric data'] : [],
@@ -114,7 +114,7 @@ export class CloudWatchProvider implements ProviderModule {
   private async alarms(ctx: Context, input: z.output<typeof alarmsInput>): Promise<ToolResult> {
     const limit = Math.min(input.limit, ctx.config.limits.maxRows);
     const result = await ctx.api.alarms(limit);
-    return { data: result.rows, examined: examined('cloudwatch', 'DescribeAlarms', {
+    return { data: result.rows, examined: examined('cloudwatch', `DescribeAlarms MetricAlarm,CompositeAlarm limit=${limit}`, {
       rowCount: result.rows.length, scannedCount: result.rows.length,
       truncated: result.more, warnings: result.more ? ['Alarm list has more pages'] : [],
     }) };
@@ -123,8 +123,12 @@ export class CloudWatchProvider implements ProviderModule {
   private async groups(ctx: Context, input: z.output<typeof groupsInput>): Promise<ToolResult> {
     const configured = ctx.cloudwatch.logGroups.slice(0, input.limit);
     const rows = [];
+    const deadline = Date.now() + ctx.config.limits.timeoutMs;
     for (const name of configured) {
-      rows.push(await ctx.api.logGroup(name) ?? { name, state: 'unknown' });
+      if (Date.now() >= deadline) throw new OpsError('QUERY_LIMIT', 'CloudWatch log group tool timed out');
+      const group = await ctx.api.logGroup(name, deadline - Date.now());
+      if (Date.now() >= deadline) throw new OpsError('QUERY_LIMIT', 'CloudWatch log group tool timed out');
+      rows.push(group ?? { name, state: 'unknown' });
     }
     const truncated = configured.length < ctx.cloudwatch.logGroups.length;
     return { data: rows, examined: examined('cloudwatch', 'DescribeLogGroups for configured names', {

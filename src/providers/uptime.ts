@@ -30,7 +30,7 @@ export function uptimeRoutes(slug: string) {
 
 function safeLabel(value: string, hostnames: readonly string[]): string {
   let result = value.replace(/https?:\/\/[^\s]+/gi, '[REDACTED]')
-    .replace(/\b(?:[a-z0-9_-]+\.)+[a-z0-9_-]+\b/gi, '[REDACTED]')
+    .replace(/\b(?:[a-z0-9_-]+\.)+[a-z]{2,}\b/gi, '[REDACTED]')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[REDACTED]');
   for (const host of hostnames) {
     result = result.replace(new RegExp(escapeRegExp(host), 'gi'), '[REDACTED]');
@@ -76,7 +76,7 @@ export class UptimeProvider implements ProviderModule {
     const uptime = context.config.providers.uptime;
     if (!uptime?.enabled) return;
     const client = new BoundedHttpClient(uptime.baseUrl, undefined, context.config.limits.timeoutMs,
-      context.config.limits.maxResponseBytes, 'Uptime Kuma', uptimeRoutes(uptime.slug));
+      context.config.limits.maxResponseBytes, 'Uptime Kuma', uptimeRoutes(uptime.slug), true);
     const ctx: Context = { ...context, uptime, client };
     server.registerTool('uptime_status', {
       description: `Read a public status page, current monitor heartbeat, and incident summaries. ${UNTRUSTED_DATA_NOTICE}`,
@@ -127,6 +127,10 @@ export class UptimeProvider implements ProviderModule {
     }).passthrough().safeParse(heartbeatBody);
     if (!page.success || !heartbeat.success) {
       return this.unavailable(started, 'Public status page data is incomplete', bytes);
+    }
+    if (page.data.publicGroupList.every((group) => group.monitorList.length === 0) &&
+      page.data.incidents.length === 0) {
+      return this.unavailable(started, 'Public status page has no published monitors', bytes);
     }
 
     const warnings: string[] = [];

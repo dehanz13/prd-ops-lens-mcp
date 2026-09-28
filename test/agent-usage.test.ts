@@ -1,5 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { chmodSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -70,6 +70,14 @@ it('projects numeric Codex and Claude usage without planted content', async () =
   expect(raw).not.toContain('branch-name');
 });
 
+it('keeps malformed transcript content out of warnings', async () => {
+  const files = syntheticFiles();
+  appendFileSync(files.codex, `\n{${files.planted}`);
+  const result = await parseUsageFile(files.codex, config([files.codex]).providers.agentUsage!);
+  expect(result.warnings).toContain('A malformed usage record was skipped');
+  expect(JSON.stringify(result)).not.toContain(files.planted);
+});
+
 it('serves a bounded report and weekly trend through real MCP calls', async () => {
   const files = syntheticFiles();
   const source = config([files.codex, files.claude]);
@@ -88,6 +96,8 @@ it('serves a bounded report and weekly trend through real MCP calls', async () =
       jobs: 2, inputTokens: 175, outputTokens: 30, costBasis: 'estimated', priceAsOf: '2026-01-01',
     }, benchmarks: [{ kind: 'feature', jobs: 2, p50Tokens: 85, p95Tokens: 120 }] },
     examined: { provider: 'agent-usage', rowCount: 2 } });
+    expect((report.structuredContent as { data: { markdown: string } }).data.markdown)
+      .toContain('Estimated price table as of 2026-01-01');
     expect(JSON.stringify(report)).not.toContain('SYNTHETIC_SECRET_DO_NOT_EXPORT');
     expect(JSON.stringify(report)).not.toContain('fake@example.test');
     expect(JSON.stringify(report)).not.toContain('/private/synthetic');

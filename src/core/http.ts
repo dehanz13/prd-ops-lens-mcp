@@ -9,6 +9,7 @@ export class BoundedHttpClient {
     private readonly maxResponseBytes: number,
     private readonly provider: string,
     private readonly allowedRoutes: readonly AllowedRoute[],
+    private readonly htmlAsNotFound = false,
   ) {}
 
   async get(path: string, parameters: Record<string, string> = {}): Promise<{ body: unknown; bytes: number }> {
@@ -50,8 +51,8 @@ export class BoundedHttpClient {
     if (response.status === 429) throw new OpsError('RATE_LIMIT', `${this.provider}: rate limited; retry later`);
     if (response.status === 404) throw new OpsError('NOT_FOUND', `${this.provider}: public resource not found`);
     if (!response.ok) throw new OpsError('UPSTREAM', `${this.provider}: upstream returned HTTP ${response.status}`);
-    if (this.provider === 'Uptime Kuma' && response.headers.get('content-type')?.includes('text/html')) {
-      throw new OpsError('NOT_FOUND', 'Uptime Kuma: public status page not found');
+    if (this.htmlAsNotFound && response.headers.get('content-type')?.includes('text/html')) {
+      throw new OpsError('NOT_FOUND', `${this.provider}: public resource not found`);
     }
     const declaredLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(declaredLength) && declaredLength > this.maxResponseBytes) {

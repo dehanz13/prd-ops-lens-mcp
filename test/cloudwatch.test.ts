@@ -66,6 +66,18 @@ async function harness(api: FakeCloudWatch, timeoutMs = 20000) {
 }
 
 describe('CloudWatch read boundary', () => {
+  it('enforces a total deadline across log-group reads', async () => {
+    const api = new FakeCloudWatch();
+    api.logGroup = async (name: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      return { name, storedBytes: 42 };
+    };
+    const fixture = await harness(api, 1000);
+    try {
+      const result = await fixture.client.callTool({ name: 'cloudwatch_log_groups', arguments: {} });
+      expect(result.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
+    } finally { await fixture.close(); }
+  });
   // @guardrail G4.1: the adapter exposes fixed read calls, and the provider issues only them.
   it('uses only named CloudWatch read actions for its four tools', async () => {
     const api = new FakeCloudWatch();
@@ -81,6 +93,12 @@ describe('CloudWatch read boundary', () => {
       for (const [name, args] of requests) {
         const result = await fixture.client.callTool({ name, arguments: args });
         expect(result.isError).toBe(false);
+        if (name === 'cloudwatch_metric_data') expect(result.structuredContent).toMatchObject({
+          examined: { query: 'GetMetricData AWS/EC2/CPUUtilization Average 60s' },
+        });
+        if (name === 'cloudwatch_alarms') expect(result.structuredContent).toMatchObject({
+          examined: { query: 'DescribeAlarms MetricAlarm,CompositeAlarm limit=50' },
+        });
       }
       expect(api.calls).toEqual(['GetCallerIdentity', 'SimulatePrincipalPolicy', 'GetMetricData',
         'DescribeAlarms', 'DescribeLogGroups', 'StartQuery', 'GetQueryResults']);

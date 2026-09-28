@@ -88,6 +88,11 @@ describe('IAM read boundary', () => {
       for (const [name, args] of requests) {
         const result = await fixture.client.callTool({ name, arguments: args });
         expect(result.isError).toBe(false);
+        if (name === 'iam_role_policies') expect(result.structuredContent).toMatchObject({
+          examined: { warnings: expect.arrayContaining([
+            'Inline role policies and permissions boundaries were not examined',
+          ]) },
+        });
       }
       expect(api.calls).toEqual(['GetCallerIdentity', 'SimulatePrincipalPolicy preflight',
         'GetCallerIdentity', 'ListRoles', 'GetRole', 'ListAttachedRolePolicies', 'GetPolicy',

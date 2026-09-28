@@ -49,6 +49,11 @@ OTEL_METRICS_INCLUDE_SESSION_ID=false
 OTEL_LOGS_EXPORTER=none
 ```
 
+Claude Code can include `user.email` and organization identifiers in standard
+OpenTelemetry attributes even with these content gates disabled. Filter those
+attributes in the collector before exporting to a shared backend. This
+repository does not configure an exporter or collector.
+
 Leave `OTEL_LOG_RAW_API_BODIES` unset. If metrics export is enabled, use a
 separate, verified write-only metrics token for the collector, never the MCP
 Grafana read token. No export endpoint, token, or live metric series is

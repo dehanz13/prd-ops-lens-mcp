@@ -23,6 +23,8 @@ const fixtureData = {
   uptime_status: { provider: 'uptime', query: 'GET public status page',
     data: { state: 'available', monitors: [], incidents: [
       { title: 'synthetic outage', status: 'resolved', createdAt: earlier }] } },
+  prometheus_range: { provider: 'grafana/prometheus', query: 'up{job="demo"}',
+    data: [{ at: later, value: 1, labels: { job: 'demo' } }] },
 } as const;
 
 const fixtureProvider: ProviderModule = { id: 'fixture', register(server, context) {
@@ -34,9 +36,10 @@ const fixtureProvider: ProviderModule = { id: 'fixture', register(server, contex
   }
 } };
 
-async function harness() {
+async function harness(maxRows?: number) {
   const path = join(mkdtempSync(join(tmpdir(), 'ops-lens-timeline-')), 'audit.jsonl');
-  const server = createServer(ConfigSchema.parse({ version: 1, audit: { path } }), [fixtureProvider]);
+  const server = createServer(ConfigSchema.parse({ version: 1, audit: { path },
+    ...(maxRows ? { limits: { maxRows } } : {}) }), [fixtureProvider]);
   const client = new Client({ name: 'timeline-test', version: '1.0.0' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(b);
@@ -90,5 +93,17 @@ it('refuses fabricated IDs, swapped tools, and client-supplied result bodies', a
       const result = await fixture.client.callTool({ name: 'incident_timeline', arguments: { sources } });
       expect(result.isError).toBe(true);
     }
+  } finally { await fixture.close(); }
+});
+
+it('preserves numeric metric values and labels and keeps the newest capped event', async () => {
+  const fixture = await harness(1);
+  try {
+    const sources = [await evidence(fixture.client, 'uptime_status'),
+      await evidence(fixture.client, 'prometheus_range')];
+    const result = await fixture.client.callTool({ name: 'incident_timeline', arguments: { sources } });
+    const events = (result.structuredContent as { data: { events: Array<{ summary: string }> } }).data.events;
+    expect(events).toHaveLength(1);
+    expect(events[0]?.summary).toContain('Metric value: 1 (job=demo)');
   } finally { await fixture.close(); }
 });

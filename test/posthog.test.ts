@@ -90,6 +90,10 @@ it('rejects mutation, nested, broad, and excessive HogQL before network access',
     expect(() => boundedHogql(query, from, to, 10, 60)).toThrow();
   }
   expect(() => boundedHogql('SELECT event FROM events', from, '2026-01-01T02:00:00Z', 10, 60)).toThrow();
+  expect(() => boundedHogql('SELECT event FROM events SELECT timestamp', from, to, 10, 60)).toThrow();
+  const futureFrom = new Date(Date.now() + 120_000).toISOString();
+  const futureTo = new Date(Date.now() + 150_000).toISOString();
+  expect(() => boundedHogql('SELECT event FROM events', futureFrom, futureTo, 10, 60)).toThrow();
 });
 
 // @guardrail G6.3: key scopes and project binding must match the configured allowlist.

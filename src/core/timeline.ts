@@ -37,7 +37,17 @@ function cloudWatchUtc(value: unknown): string | null {
 }
 
 function short(value: unknown): string {
-  return typeof value === 'string' ? value.slice(0, 300) : 'unknown';
+  return typeof value === 'string' ? value.slice(0, 300)
+    : typeof value === 'number' && Number.isFinite(value) ? String(value) : 'unknown';
+}
+
+function metricLabels(value: unknown): string {
+  const labels = row(value);
+  if (!labels) return '';
+  const pairs = Object.entries(labels).slice(0, 8).flatMap(([key, label]) =>
+    typeof label === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(key)
+      ? [`${key}=${label.slice(0, 80)}`] : []);
+  return pairs.length ? ` (${pairs.join(', ')})` : '';
 }
 
 function extract(tool: z.output<typeof sourceTool>, data: unknown): Array<{ at: string; summary: string }> {
@@ -71,7 +81,7 @@ function extract(tool: z.output<typeof sourceTool>, data: unknown): Array<{ at: 
     } else if (tool === 'posthog_error_issues') {
       at = utc(item.firstSeen); summary = `Error issue: ${short(item.reference)} (${short(item.status)})`;
     } else if (tool === 'prometheus_range' || tool === 'cloudwatch_metric_data') {
-      at = utc(item.at); summary = `Metric value: ${short(item.value)}`;
+      at = utc(item.at); summary = `Metric value: ${short(item.value)}${metricLabels(item.labels)}`;
     }
     return at ? [{ at, summary }] : [];
   });
@@ -112,7 +122,7 @@ export function incidentTimeline(input: TimelineInput, maxRows: number,
   if (sourceStatus.some((source) => source.state === 'unknown')) warnings.push('An expected source was not supplied');
   const ordered = [...events.values()].sort((a, b) => a.at.localeCompare(b.at) ||
     a.summary.localeCompare(b.summary));
-  const output = ordered.slice(0, maxRows);
+  const output = ordered.slice(-maxRows);
   const windows = input.sources.flatMap((source) => {
     const window = evidence.get(source.evidenceId)!.result.examined.window;
     return [window.from, window.to];

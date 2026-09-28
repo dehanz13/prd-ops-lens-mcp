@@ -40,6 +40,7 @@ it('maps CloudWatch metric, alarm, group and Logs Insights reads to fixed SDK co
       })) };
     }
     if (command instanceof DescribeAlarmsCommand) {
+      expect(command.input.AlarmTypes).toEqual(['MetricAlarm', 'CompositeAlarm']);
       return { MetricAlarms: [{ AlarmName: 'demo-alarm', StateValue: 'OK',
         StateUpdatedTimestamp: new Date('2026-01-01T00:00:00Z') }] };
     }

@@ -47,6 +47,13 @@ checkout="$scratch/checkout"
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
 cleanup() {
+  if [[ ${failed:-0} -ne 0 && -d $scratch ]]; then
+    evidence_dir="$trusted_dir/evidence/$sha"
+    (umask 077; mkdir -p "$evidence_dir")
+    for log in "$scratch"/*.log; do
+      if [[ -f $log ]]; then install -m 600 "$log" "$evidence_dir/$(basename "$log")"; fi
+    done
+  fi
   if [[ -d $checkout ]]; then git -C "$root" worktree remove --force "$checkout" >/dev/null 2>&1 || true; fi
   rm -rf "$scratch"
 }

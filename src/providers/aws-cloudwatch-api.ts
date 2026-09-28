@@ -32,7 +32,7 @@ export interface CloudWatchReadApi {
   simulateWrites(arn: string, actions: readonly string[]): Promise<Record<string, boolean>>;
   metric(request: MetricRequest): Promise<{ points: Array<{ at: string; value: number }>; partial: boolean }>;
   alarms(limit: number): Promise<{ rows: Array<{ name: string; state: string; updatedAt: string | null }>; more: boolean }>;
-  logGroup(name: string): Promise<{ name: string; storedBytes: number | null } | null>;
+  logGroup(name: string, timeoutMs: number): Promise<{ name: string; storedBytes: number | null } | null>;
   startLogs(groups: string[], from: string, to: string, query: string, limit: number,
     timeoutMs: number): Promise<string>;
   pollLogs(queryId: string, timeoutMs: number): Promise<LogQueryResult>;
@@ -140,7 +140,9 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
   }
 
   async alarms(limit: number): Promise<{ rows: Array<{ name: string; state: string; updatedAt: string | null }>; more: boolean }> {
-    const response = await this.metricClient.send(new DescribeAlarmsCommand({ MaxRecords: limit }),
+    const response = await this.metricClient.send(new DescribeAlarmsCommand({
+      MaxRecords: limit, AlarmTypes: ['MetricAlarm', 'CompositeAlarm'],
+    }),
       { abortSignal: this.signal() });
     const all = [...(response.MetricAlarms ?? []), ...(response.CompositeAlarms ?? []),
       ...(response.LogAlarms ?? [])];
@@ -150,12 +152,14 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
     })), more: Boolean(response.NextToken || all.length > limit) };
   }
 
-  async logGroup(name: string): Promise<{ name: string; storedBytes: number | null } | null> {
+  async logGroup(name: string, timeoutMs = this.timeoutMs): Promise<{ name: string; storedBytes: number | null } | null> {
+    const deadline = Date.now() + Math.min(timeoutMs, this.timeoutMs);
     let nextToken: string | undefined;
     for (let page = 0; page < 3; page += 1) {
+      if (Date.now() >= deadline) throw new OpsError('QUERY_LIMIT', 'CloudWatch log group lookup timed out');
       const response = await this.logsClient.send(new DescribeLogGroupsCommand({
         logGroupNamePrefix: name, limit: 50, nextToken,
-      }), { abortSignal: this.signal() });
+      }), { abortSignal: this.signal(deadline - Date.now()) });
       const exact = response.logGroups?.find((group) => group.logGroupName === name);
       if (exact) return { name, storedBytes: exact.storedBytes ?? null };
       nextToken = response.nextToken;

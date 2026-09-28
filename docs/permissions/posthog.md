@@ -9,9 +9,9 @@ At startup, the provider calls `GET /api/personal_api_keys/@current/` with that 
 | MCP tool | PostHog request | Scope | Result |
 | --- | --- | --- | --- |
 | `posthog_hogql` | `POST /api/projects/{project_id}/query/` with `HogQLQuery` | `query:read` | bounded event query rows |
-| `posthog_insight` | `GET /api/projects/{project_id}/insights/{id}/` | `insight:read` | id, short id, name, type, refresh time |
-| `posthog_error_issues` | `GET /api/projects/{project_id}/error_tracking/issues/` | `error_tracking:read` | issue state and counts |
-| `posthog_flag` | `GET /api/projects/{project_id}/feature_flags/{id}/` | `feature_flag:read` | flag key and active state |
+| `posthog_insight` | `GET /api/projects/{project_id}/insights/{id}/` | `insight:read` | id, short id, insight kind, refresh time |
+| `posthog_error_issues` | `GET /api/projects/{project_id}/error_tracking/issues/` | `error_tracking:read` | hashed reference, status, severity, first-seen time |
+| `posthog_flag` | `GET /api/projects/{project_id}/feature_flags/{id}/` | `feature_flag:read` | numeric id, active state, archived state |
 
 All paths and projects are allowlisted. The HogQL tool accepts a single SELECT from `events` with only `event`, `timestamp`, and `count(*)` projections and no aliases. It requires balanced parentheses and a UTC window; it rejects comments, subqueries, joins, unions, raw property/payload columns, mutation keywords, and unsafe grouping or ordering. It enforces a terminal LIMIT of at most 1,000. The provider inserts the window predicate and applies a request timeout and response byte cap. Returned cells are classified by the validated projection, never by upstream column labels. Recording and console endpoints are absent.
 

@@ -18,7 +18,6 @@ async function harness(directory: string, systemMap: string, runbooks: string[] 
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
 
-// @guardrail G8.2: local resources are explicit, owner-only and confined to the configured directory.
 it('reads and redacts an explicitly configured system map', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ops-lens-resources-'));
   chmodSync(directory, 0o700);
@@ -34,6 +33,7 @@ it('reads and redacts an explicitly configured system map', async () => {
   } finally { await fixture.close(); }
 });
 
+// @guardrail G8.2: local resources refuse symlinks, exposed files, and excess bytes.
 it('rejects a linked file outside the configured directory and an exposed file', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ops-lens-resources-'));
   chmodSync(directory, 0o700);
@@ -51,6 +51,12 @@ it('rejects a linked file outside the configured directory and an exposed file',
     await expect(exposed.client.readResource({ uri: 'ops-lens://system-map' }))
       .rejects.toThrow('Configured resource could not be read');
   } finally { await exposed.close(); }
+  writeFileSync(join(directory, 'large.md'), 'x'.repeat(65_537), { mode: 0o600 });
+  const oversized = await harness(directory, 'large.md');
+  try {
+    await expect(oversized.client.readResource({ uri: 'ops-lens://system-map' }))
+      .rejects.toThrow('Configured resource could not be read');
+  } finally { await oversized.close(); }
 });
 
 // @guardrail G8.3: every registered prompt treats provider output as untrusted and asks for read-only evidence.

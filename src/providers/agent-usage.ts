@@ -202,7 +202,8 @@ export function usageReport(jobs: UsageJob[], priceAsOf: string | null) {
     cacheWriteTokens: jobs.reduce((sum, job) => sum + job.cacheWriteTokens, 0),
     estimatedCostUsd: totalEstimatedCost,
     costBasis: totalEstimatedCost === null ? 'unknown' as const : 'estimated' as const,
-    priceAsOf }, markdown: markdown(jobs) };
+    priceAsOf }, markdown: `${priceAsOf ? `Estimated price table as of ${priceAsOf} (USD).\n\n` :
+      'Cost is unknown without a dated price table.\n\n'}${markdown(jobs)}` };
 }
 
 export function usageTrend(jobs: UsageJob[], to: string) {

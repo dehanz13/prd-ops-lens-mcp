@@ -100,6 +100,12 @@ describe('redaction and audit', () => {
     expect(serialized).toContain('room:[REDACTED]:player:[REDACTED]');
   });
 
+  it('preserves a clock value while masking real IPv6 addresses', () => {
+    const redactor = new Redactor(redactionConfig);
+    expect(redactor.text('12:30:45,123')).toBe('12:30:45,123');
+    expect(redactor.text('address 2001:db8::1')).not.toContain('2001:db8::1');
+  });
+
   it('writes one private JSON line with redacted parameters', () => {
     const path = temporaryFile('audit.jsonl');
     const log = new AuditLog(path, new Redactor(redactionConfig));
@@ -116,6 +122,21 @@ describe('redaction and audit', () => {
 });
 
 describe('tool envelope', () => {
+  it('refuses oversized input and omits large parameters from the audit', async () => {
+    const path = temporaryFile('audit.jsonl');
+    const redactor = new Redactor(redactionConfig);
+    let called = false;
+    const result = await runTool({ audit: new AuditLog(path, redactor), redactor },
+      'query', 'fake', { query: 'x'.repeat(270_000) }, async () => {
+        called = true;
+        return { data: [], examined: examined('fake', 'should not run') };
+      });
+    expect(called).toBe(false);
+    expect(result.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
+    const audit = readFileSync(path, 'utf8');
+    expect(audit.length).toBeLessThan(1500);
+    expect(audit).toContain('Input exceeded the audit parameter cap');
+  });
   it('returns examined context even for zero results', async () => {
     const path = temporaryFile('audit.jsonl');
     const redactor = new Redactor(redactionConfig);

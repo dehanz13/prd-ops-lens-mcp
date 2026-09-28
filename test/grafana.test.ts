@@ -106,6 +106,24 @@ describe('Grafana tools', () => {
     } finally { await fixture.close(); }
   });
 
+  // @guardrail G7.4: demo node metrics use the verified Grafana query transport.
+  it('reads a node-exporter series through the configured Prometheus data source', async () => {
+    mockServer.use(http.post(`${base}/api/ds/query`, async ({ request }) => {
+      const body = await request.json() as { queries: Array<{ expr: string; datasource: { uid: string } }> };
+      expect(body.queries[0]).toMatchObject({ expr: 'node_load1{job="node-exporter"}',
+        datasource: { uid: 'prom' } });
+      return HttpResponse.json(prometheusVectorFixture.response);
+    }));
+    const fixture = await harness();
+    try {
+      const result = await fixture.client.callTool({ name: 'prometheus_instant', arguments: {
+        query: 'node_load1{job="node-exporter"}', at: from,
+      } });
+      expect(result.structuredContent).toMatchObject({ examined: { provider: 'grafana/prometheus',
+        rowCount: 1 } });
+    } finally { await fixture.close(); }
+  });
+
   // @guardrail G2.2: an empty Grafana metric frame means no observed series, not a healthy value.
   it('returns an examined zero-row result for an absent metric series', async () => {
     mockServer.use(http.post(`${base}/api/ds/query`, () => HttpResponse.json({
@@ -208,6 +226,27 @@ describe('Grafana tools', () => {
         selector: '{job="service-a"}', query: `{job="service-a"} |~ "${'x'.repeat(201)}"`, from, to,
       } });
       expect(longRegex.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
+      for (const [selector, query] of [
+        ['{job}', '{job} |= "error"'],
+        ['{job="service-a"}', '{job="service-a"} | regexp "(?P<token>.*)"'],
+        ['{job="service-a"}', '{job="service-a"} |= `error`'],
+      ]) {
+        const rejected = await fixture.client.callTool({ name: 'loki_logs', arguments: {
+          selector, query, from, to,
+        } });
+        expect(rejected.isError).toBe(true);
+      }
+    } finally { await fixture.close(); }
+  });
+
+  it('caps Loki windows at six hours even with a larger configured window', async () => {
+    const fixture = await harness({ maxWindowMinutes: 720 });
+    try {
+      const rejected = await fixture.client.callTool({ name: 'loki_logs', arguments: {
+        selector: '{job="service-a"}', query: '{job="service-a"} |= "error"',
+        from, to: '2026-01-01T07:00:00.000Z',
+      } });
+      expect(rejected.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
     } finally { await fixture.close(); }
   });
 

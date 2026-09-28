@@ -58,7 +58,10 @@ scope against the target account before attaching it.
 Role and policy documents are parsed in memory. Tools return principal types,
 whether trust conditions exist, whether an external ID is required, and policy
 statement counts. They never return principal values, external-ID values,
-condition values, or full policy documents. Simulation requires one configured
+condition values, or full policy documents. The attached-policy summary does
+not examine inline role policies or permission
+boundaries and carries an explicit warning; it cannot establish a role's full
+effective permissions. Simulation requires one configured
 role, one action without wildcards, and one concrete resource ARN. Missing
 context yields `unknown`, not a denial claim. The matched statement reference
 combines AWS's source policy ID and document position; AWS does not return the

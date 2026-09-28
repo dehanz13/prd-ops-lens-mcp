@@ -159,7 +159,8 @@ export class IamProvider implements ProviderModule {
     return { data: { roleName: role.name, trust: summarizeTrust(role.trustDocument), policies },
       examined: examined('iam', 'GetRole and attached policy summaries', {
         rowCount: policies.length, scannedCount: result.rows.length, truncated: result.truncated,
-        warnings: result.truncated ? ['Attached policy list may be incomplete'] : [],
+        warnings: ['Inline role policies and permissions boundaries were not examined',
+          ...(result.truncated ? ['Attached policy list may be incomplete'] : [])],
       }) };
   }
 

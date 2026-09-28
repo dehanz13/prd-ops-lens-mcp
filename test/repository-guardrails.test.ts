@@ -34,8 +34,9 @@ it('keeps CI offline and defaults to read-only permissions', () => {
 // @guardrail G11.5: repository fixtures and examples carry synthetic values only.
 it('keeps private example configuration out of public tracking', () => {
   const ignore = read('.gitignore');
-  expect(ignore).toContain('2026-09-28-codex-answers-ops-lens-mcp.md');
-  expect(ignore).toContain('2026-09-27-codex-prompt-sre-observability-mcp-server.md');
+  expect(ignore).toContain('*-codex-answers-*.md');
+  expect(ignore).toContain('*-codex-prompt-*.md');
+  expect(ignore).not.toContain('2026-09-28-codex-answers-ops-lens-mcp.md');
   expect(read('config.example.yaml')).not.toMatch(/Bearer\s+[A-Za-z0-9]|AKIA[A-Z0-9]{16}/);
   const cast = read('docs/demo.cast').trim().split('\n').map((line) => JSON.parse(line));
   expect(cast[0]).toMatchObject({ version: 2, title: 'Synthetic MCP demo' });

@@ -48,7 +48,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     process.exit(2);
   }
   const terms = existsSync(privatePath) ? loadPrivateTerms(privatePath) : [];
-  const files = [...fixtureFiles('test/fixtures'), ...fixtureFiles('evals/fixtures')];
+  const files = [...fixtureFiles('test/fixtures'), ...fixtureFiles('evals/fixtures'),
+    ...['docs/demo.cast', 'config.example.yaml'].filter(existsSync)];
   let violations = 0;
   for (const path of files) {
     const found = lintFixtureText(readFileSync(path, 'utf8'), terms);

@@ -25,6 +25,9 @@ it('keeps ten documented synthetic worlds and detects planted fixture violations
   expect(lintFixtureText('Bearer synthetic-credential')).toContain('credential-like value');
   expect(lintFixtureText('quiet-private-marker', ['quiet-private-marker'])).toContain('private term');
   expect(lintFixtureText('192.0.2.1 and 2001:db8::1')).toEqual([]);
+  const lint = JSON.parse(execFileSync(process.execPath, ['scripts/lint-fixtures.mjs'],
+    { encoding: 'utf8' }).trim()) as { files: number; violations: number };
+  expect(lint).toMatchObject({ files: 14, violations: 0 });
 });
 
 // @guardrail G10.2: a real MCP replay fails its score when each case's key observation is removed.

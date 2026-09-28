@@ -9,6 +9,6 @@ config.local.*
 *.real.fixture.*
 recordings/real/
 *.token
-2026-09-27-codex-prompt-sre-observability-mcp-server.md
-2026-09-28-codex-answers-ops-lens-mcp.md
+*-codex-prompt-*.md
+*-codex-answers-*.md
 .DS_Store

@@ -9,7 +9,7 @@
         "data": [{ "at": "2026-01-01T00:10:00.000Z", "line": "synthetic pool exhausted" }] }]
     },
     {
-      "id": "vanished-alert-metric", "fault": "Scrape target disappeared while an alert stayed green", "marker": "scrape target absent",
+      "id": "vanished-alert-metric", "fault": "Scrape target disappeared and no metric series was returned", "marker": "scrape target absent",
       "keySource": 0, "shapeSource": "Loki log row and Prometheus range rows",
       "sources": [
         { "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-scraper\"}",
@@ -64,7 +64,7 @@
     {
       "id": "cache-latency", "fault": "Cache latency breaches its alarm threshold", "marker": "latency high",
       "keySource": 0, "shapeSource": "CloudWatch alarm row: name, state, updatedAt",
-      "sources": [{ "tool": "cloudwatch_alarms", "provider": "cloudwatch", "query": "DescribeAlarms",
+      "sources": [{ "tool": "cloudwatch_alarms", "provider": "cloudwatch", "query": "DescribeAlarms MetricAlarm,CompositeAlarm limit=50",
         "data": [{ "name": "cache latency high", "state": "ALARM", "updatedAt": "2026-01-01T00:28:00.000Z" }] }]
     },
     {

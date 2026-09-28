@@ -84,7 +84,7 @@ describe('foundation guardrails', () => {
     const configured = new Redactor({ identityKeys: ['playerId', 'player_id'],
       identityLabels: ['player'], identityValues: [], awsIdentifiers: true });
     const planted = [
-      'playerId=p-777', 'playerId: p-777', 'player_id=p-777',
+      'playerId=p-777', 'playerId: p-777', 'player_id=p-777', 'email=p-777',
       '{"playerId":["p-777"],"player":{"id":"p-777"}}',
       '{\\"playerId\\":\\"p-777\\"}',
     ];
@@ -94,6 +94,18 @@ describe('foundation guardrails', () => {
     expect(configured.text(`secret-shaped ${secret} end`)).not.toContain(secret);
     const sha1 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
     expect(configured.text(`hash ${sha1} end`)).not.toContain(sha1);
+  });
+
+  it('removes a planted credential from text, structured output, and audit', async () => {
+    const { log, path } = audit();
+    const planted = 'AKIA0123456789ABCDEF';
+    const result = await runTool({ audit: log, redactor }, 'query', 'synthetic',
+      { query: `token=${planted}` }, async () => ({
+        data: { line: `credential ${planted}` }, examined: examined('synthetic', `query ${planted}`),
+      }));
+    expect(JSON.stringify(result.content)).not.toContain(planted);
+    expect(JSON.stringify(result.structuredContent)).not.toContain(planted);
+    expect(readFileSync(path, 'utf8')).not.toContain(planted);
   });
 
   // @guardrail G0.4: oversized output is replaced and its examined record is marked.

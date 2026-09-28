@@ -95,24 +95,30 @@ export class RestartGate {
         throw new OpsError('REFUSED', 'Confirmation target or host changed');
       }
       const before = await this.api.health();
-      await this.api.restart(target.id);
-      this.recent.set(target.id, this.clock());
-      const afterTarget = await this.api.inspect();
-      if (afterTarget.id !== target.id || afterTarget.lastStartedAt === target.lastStartedAt) {
-        throw new OpsError('REFUSED', 'Demo restart completion could not be verified');
+      try {
+        await this.api.restart(target.id);
+        this.recent.set(target.id, this.clock());
+        const afterTarget = await this.api.inspect();
+        if (afterTarget.id !== target.id || afterTarget.lastStartedAt === target.lastStartedAt) {
+          throw new OpsError('REFUSED', 'Demo restart completion could not be verified');
+        }
+        let after = await this.api.health();
+        for (let attempt = 0; after !== 'healthy' && attempt < 30; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          after = await this.api.health();
+        }
+        return { data: { container: input.container, host: 'local-demo',
+          beforeHealth: before, afterHealth: after,
+          reasonLength: input.reason.length, restartedAt: afterTarget.lastStartedAt },
+        examined: examined('demo-restart', 'Restart one allowlisted local demo container', {
+          rowCount: 1, scannedCount: 1, warnings: after === 'healthy' ? [] :
+            ['Demo health did not recover within the post-restart check window'],
+        }) };
+      } catch {
+        throw new OpsError('UPSTREAM', 'Demo restart outcome could not be verified', {
+          warnings: [`Before health: ${before}; after health: unknown`],
+        });
       }
-      let after = await this.api.health();
-      for (let attempt = 0; after !== 'healthy' && attempt < 30; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        after = await this.api.health();
-      }
-      return { data: { container: input.container, host: 'local-demo',
-        beforeHealth: before, afterHealth: after,
-        reasonLength: input.reason.length, restartedAt: afterTarget.lastStartedAt },
-      examined: examined('demo-restart', 'Restart one allowlisted local demo container', {
-        rowCount: 1, scannedCount: 1, warnings: after === 'healthy' ? [] :
-          ['Demo health did not recover within the post-restart check window'],
-      }) };
     } finally { this.active.delete(input.container); }
   }
 
@@ -126,31 +132,36 @@ export class RestartGate {
 export class DemoRestartProvider implements ProviderModule {
   readonly id = 'demo-restart';
   private gate: RestartGate | undefined;
+  private preflightCompleted = false;
   constructor(private readonly api?: DemoRestartApi, private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly clock: () => number = Date.now, private readonly selfId?: string) {}
 
   async preflight(config: Config): Promise<void> {
     this.gate = undefined;
+    this.preflightCompleted = false;
     const writes = config.writes;
-    if (!writes.enabled) return;
+    if (!writes.enabled) { this.preflightCompleted = true; return; }
     if (this.env.OPS_LENS_ENABLE_WRITES !== '1' || writes.containers.length !== 1 ||
       writes.containers[0] !== 'demo-api' || !writes.dockerSocket ||
       !writes.expectedDaemonId || !writes.killSwitchFile || !writes.deployLockFile) {
       throw new OpsError('REFUSED', 'Demo write prerequisites are incomplete');
     }
     if (present(writes.killSwitchFile) || present(writes.deployLockFile)) {
-      throw new OpsError('REFUSED', 'Demo restart is disabled by a kill switch or deploy lock');
+      this.preflightCompleted = true;
+      return;
     }
     const api = this.api ?? new DockerDesktopDemoApi(writes.dockerSocket);
     if (await api.identity() !== writes.expectedDaemonId) {
       throw new OpsError('REFUSED', 'Local demo host could not be verified');
     }
     this.gate = new RestartGate(writes, api, this.clock, this.selfId);
+    this.preflightCompleted = true;
   }
 
   register(server: McpServer, context: { config: Config; runtime: ToolRuntime }): void {
     if (!context.config.writes.enabled) return;
-    if (!this.gate) throw new OpsError('REFUSED', 'Demo restart preflight was not completed');
+    if (!this.preflightCompleted) throw new OpsError('REFUSED', 'Demo restart preflight was not completed');
+    if (!this.gate) return;
     const gate = this.gate;
     server.registerTool('plan_restart', { description: `Plan one local demo API restart and return a two-minute confirmation. ${UNTRUSTED_DATA_NOTICE}`,
       inputSchema: auditedInput(planInput), outputSchema: ToolResultSchema,

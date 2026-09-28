@@ -1,4 +1,5 @@
 import type { Config } from './config.js';
+import { isIP } from 'node:net';
 
 const sensitiveKeyNames = 'authorization|cookie|password|secret|token|api[_-]?key|access[_-]?key|aws_secret_access_key|aws_access_key_id|user[_-]?id|player[_-]?id|session[_-]?id|account[_-]?id|email|ip|url';
 const fixedSensitiveKeys = new RegExp(`^(?:${sensitiveKeyNames})$`, 'i');
@@ -41,6 +42,7 @@ export class Redactor {
       : null;
     const jsonKeys = [...this.identityKeys].map(escapeRegExp);
     const assignmentKeys = ['user[_-]?id', 'player[_-]?id', 'session[_-]?id', 'account[_-]?id',
+      'email', 'ip', 'url',
       ...config.identityKeys.map(escapeRegExp)];
     this.identityAssignmentPattern = new RegExp(
       `\\b((?:${assignmentKeys.join('|')})(?:\\\\?")?\\s*[:=]\\s*(?:\\\\?")?)[^\\s,;\\]}"]+`, 'gi');
@@ -68,7 +70,7 @@ export class Redactor {
       .replace(prefixedToken, '[REDACTED]')
       .replace(email, '[REDACTED]')
       .replace(ipv4, '[REDACTED]')
-      .replace(ipv6, '[REDACTED]');
+      .replace(ipv6, (candidate) => isIP(candidate) === 6 ? '[REDACTED]' : candidate);
     if (this.awsIdentifiers) {
       result = result.replace(awsArn, '[REDACTED]').replace(awsAccountId, '[REDACTED]');
     }

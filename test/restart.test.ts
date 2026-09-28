@@ -85,6 +85,27 @@ it('refuses missing startup flag, non-allowlisted config and the kill switch', a
   } finally { await client.close(); await server.close(); }
 });
 
+it('keeps read-only server tools available when a demo lock exists at startup', async () => {
+  const fixture = setup();
+  writeFileSync(fixture.writes.killSwitchFile, 'stop');
+  const config = ConfigSchema.parse({ version: 1, audit: { path: join(fixture.dir, 'audit') },
+    writes: fixture.writes });
+  const provider = new DemoRestartProvider(fixture.api, { OPS_LENS_ENABLE_WRITES: '1' });
+  await provider.preflight(config);
+  const server = createServer(config, [provider]);
+  const client = new Client({ name: 'locked-restart-test', version: '1.0.0' });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  try {
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(names).toContain('server_status');
+    expect(names).not.toContain('restart_container');
+    expect(names).not.toContain('plan_restart');
+    expect(fixture.restarts).toBe(0);
+  } finally { await client.close(); await server.close(); }
+});
+
 // @guardrail G9.2: a two-minute, single-use token binds host, target and nonce.
 it('requires a reason and refuses expired, replayed, changed-host and changed-target plans', async () => {
   const fixture = setup();
@@ -169,6 +190,32 @@ it('reports before and after health and audits a refused attempt without its tok
     expect(audit).toContain('"outcome":"refused"');
     expect(audit).not.toContain(token);
     expect(audit).not.toContain('Synthetic recovery reason');
+  } finally { await client.close(); await server.close(); }
+});
+
+it('reports before health and unknown after health when Docker restart throws', async () => {
+  const fixture = setup();
+  const api: DemoRestartApi = { ...fixture.api,
+    restart: async () => { throw Error('synthetic transport failure'); } };
+  const config = ConfigSchema.parse({ version: 1, audit: { path: join(fixture.dir, 'audit.jsonl') },
+    writes: fixture.writes });
+  const provider = new DemoRestartProvider(api, { OPS_LENS_ENABLE_WRITES: '1' }, () => now);
+  await provider.preflight(config);
+  const server = createServer(config, [provider]);
+  const client = new Client({ name: 'restart-failure-test', version: '1.0.0' });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  try {
+    const plan = await client.callTool({ name: 'plan_restart', arguments: { container: 'demo-api' } });
+    const token = (plan.structuredContent as { data: { confirmation: string } }).data.confirmation;
+    const result = await client.callTool({ name: 'restart_container', arguments: {
+      container: 'demo-api', token, reason: 'Synthetic recovery reason',
+    } });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ data: { code: 'UPSTREAM' },
+      examined: { warnings: expect.arrayContaining(['Before health: healthy; after health: unknown']) } });
+    expect(JSON.stringify(result)).not.toContain('synthetic transport failure');
   } finally { await client.close(); await server.close(); }
 });
 

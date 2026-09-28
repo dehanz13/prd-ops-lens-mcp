@@ -8,5 +8,7 @@ export default tseslint.config(
     fetch: 'readonly', process: 'readonly', AbortSignal: 'readonly',
     setTimeout: 'readonly', setInterval: 'readonly',
   } } },
+  { files: ['src/providers/**/*.ts'], rules: { 'no-restricted-globals': ['error',
+    { name: 'fetch', message: 'Provider HTTP must use the bounded allowlisted client.' }] } },
   { ignores: ['dist/**', 'coverage/**'] },
 );

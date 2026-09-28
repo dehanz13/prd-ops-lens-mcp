@@ -22,6 +22,8 @@ const lokiInput = z.object({
   logCode: z.string().regex(/^[A-Za-z0-9_:-]{1,80}$/).optional(),
   limit: z.number().int().min(1).max(1000).default(100),
 });
+const lokiMatcher = '[A-Za-z_][A-Za-z0-9_]*\\s*(?:=|!=|=~|!~)\\s*"(?:\\\\.|[^"\\\\])*"';
+const lokiSelectorPattern = new RegExp(`^\\{\\s*${lokiMatcher}(?:\\s*,\\s*${lokiMatcher})*\\s*\\}$`);
 
 const dashboardResponse = z.array(z.object({ uid: z.string(), title: z.string(), type: z.string() }).passthrough());
 const alertResponse = z.object({ data: z.object({ groups: z.array(z.object({
@@ -222,8 +224,12 @@ export class GrafanaProvider implements ProviderModule {
     const to = input.to ?? new Date().toISOString();
     const from = input.from ?? new Date(Date.parse(to) - 3_600_000).toISOString();
     checkWindow(from, to, Math.min(360, ctx.config.limits.maxWindowMinutes));
-    if (!input.selector.includes('=') || !input.query.startsWith(input.selector) || input.query.slice(input.selector.length).includes('{')) {
+    if (!lokiSelectorPattern.test(input.selector) || !input.query.startsWith(input.selector) ||
+      input.query.slice(input.selector.length).includes('{')) {
       throw new OpsError('QUERY_LIMIT', 'Loki: query must start with its single nonempty stream selector');
+    }
+    if (input.query.includes('`') || /\|\s*regexp\b/i.test(input.query)) {
+      throw new OpsError('QUERY_LIMIT', 'Loki: backtick and regexp stages are outside the bounded query grammar');
     }
     const regexes = [...input.query.matchAll(/(?:=~|!~|\|~)\s*"((?:\\.|[^"\\])*)"/g)];
     if (regexes.some((match) => (match[1]?.length ?? 0) > 200)) {

@@ -31,6 +31,14 @@ export type ToolRuntime = {
   evidence?: Map<string, { tool: string; result: ToolResult }>;
 };
 
+function auditParameters(parameters: unknown): unknown {
+  try {
+    const encoded = JSON.stringify(parameters);
+    if (encoded !== undefined && Buffer.byteLength(encoded) <= 4096) return parameters;
+  } catch { /* Cyclic or unencodable input is omitted from the audit. */ }
+  return { omitted: 'Input exceeded the audit parameter cap or could not be encoded' };
+}
+
 /** The sole MCP result exit: validate, redact, cap, audit, and then encode. */
 export function emit(
   runtime: ToolRuntime,
@@ -60,7 +68,7 @@ export function emit(
         warnings: ['No safe provider output was returned'],
       }) };
   }
-  runtime.audit.record({ at: new Date().toISOString(), tool, parameters, durationMs,
+  runtime.audit.record({ at: new Date().toISOString(), tool, parameters: auditParameters(parameters), durationMs,
     examined: safe.examined, outcome: actualOutcome });
   if (actualOutcome === 'ok' && runtime.evidence && safe.examined.provider !== 'local') {
     const evidenceId = randomUUID();
@@ -92,6 +100,14 @@ export async function runTool<T>(
   try {
     runtime.audit.assertReady();
     release = runtime.limiter?.enter(provider);
+    try {
+      if (Buffer.byteLength(JSON.stringify(parameters)) > 262_144) {
+        throw new OpsError('QUERY_LIMIT', 'Tool input exceeds 256 KiB');
+      }
+    } catch (error) {
+      if (error instanceof OpsError) throw error;
+      throw new OpsError('REFUSED', 'Tool input could not be encoded');
+    }
     result = ToolResultSchema.parse(await handler());
   } catch (error) {
     outcome = error instanceof OpsError && ['REFUSED', 'QUERY_LIMIT'].includes(error.code) ? 'refused' : 'error';
@@ -104,10 +120,11 @@ export async function runTool<T>(
     let errorExamined;
     try {
       errorExamined = examined(provider, typeof parametersObject.query === 'string'
-        ? parametersObject.query : `${tool} failed`, {
+        ? parametersObject.query.slice(0, 200) : `${tool} failed`, {
         ...(window ? { window } : {}),
         ...(error instanceof OpsError ? error.details : {}),
-        warnings: ['No complete result was returned'],
+        warnings: [...(error instanceof OpsError ? error.details.warnings ?? [] : []),
+          'No complete result was returned'],
       });
     } catch {
       errorExamined = examined(provider, `${tool} failed`, {
