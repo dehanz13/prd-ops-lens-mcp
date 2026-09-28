@@ -1,0 +1,13 @@
+{
+  "sourceNote": "Hand-made synthetic Grafana-managed rules response. The state endpoint is used by Grafana's alert list; shape should also be checked against the selected live Grafana version before release.",
+  "response": {
+    "data": {
+      "groups": [
+        { "name": "service-a", "rules": [
+          { "name": "high errors", "state": "firing", "health": "ok" },
+          { "name": "high latency", "state": "normal", "health": "ok" }
+        ] }
+      ]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "uid": "synthetic-incident",
+  "title": "Synthetic incident: score writes",
+  "tags": ["demo", "synthetic"],
+  "schemaVersion": 41,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Database pool in use",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "demo-prometheus" },
+      "targets": [{ "expr": "demo_db_pool_in_use", "refId": "A" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "title": "Score write errors",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "demo-prometheus" },
+      "targets": [{ "expr": "demo_score_write_errors_total", "refId": "A" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    }
+  ],
+  "time": { "from": "now-1h", "to": "now" }
+}

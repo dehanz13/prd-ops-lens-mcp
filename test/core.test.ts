@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AuditLog } from '../src/core/audit.js';
-import { ConfigSchema, loadConfig, providerToken } from '../src/core/config.js';
+import { ConfigSchema, loadConfig, providerToken, providerTokenFile } from '../src/core/config.js';
 import { Redactor } from '../src/core/redaction.js';
 import { examined, OpsError } from '../src/core/result.js';
 import { runTool } from '../src/core/tool.js';
@@ -33,7 +33,8 @@ describe('configuration', () => {
     writeFileSync(file, `version: 1\naudit:\n  path: ${temporaryFile('audit.jsonl')}\n`);
     const config = loadConfig(file);
     expect(config.limits).toEqual({ maxWindowMinutes: 60, maxRows: 1000, maxOutputBytes: 65_536,
-      maxConcurrentProviderCalls: 2, timeoutMs: 20000 });
+      maxConcurrentProviderCalls: 2, maxResponseBytes: 2_000_000,
+      maxLokiScanBytes: 5_000_000, timeoutMs: 20000 });
     expect(config.writes).toEqual({ enabled: false, demoOnly: true, containers: [] });
   });
 
@@ -57,6 +58,18 @@ describe('configuration', () => {
   it('reads a token only from its named environment variable', () => {
     expect(providerToken('TOKEN', { TOKEN: 'private' })).toBe('private');
     expect(() => providerToken('TOKEN', {})).toThrow('Missing provider token');
+  });
+
+  it('accepts a private token file and rejects a world-readable one', () => {
+    const path = temporaryFile('viewer.token');
+    writeFileSync(path, 'synthetic-token\n', { mode: 0o600 });
+    expect(providerTokenFile(path)).toBe('synthetic-token');
+    expect(() => ConfigSchema.parse({ version: 1, audit: { path: temporaryFile('audit') },
+      providers: { grafana: { enabled: true, baseUrl: 'https://example.invalid',
+        tokenFile: path, tokenEnv: 'TOKEN', prometheusUid: 'prom', lokiUid: 'loki' } },
+    })).toThrow();
+    chmodSync(path, 0o644);
+    expect(() => providerTokenFile(path)).toThrow('owner-only');
   });
 });
 

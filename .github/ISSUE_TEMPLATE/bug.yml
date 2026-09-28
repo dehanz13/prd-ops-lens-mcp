@@ -1,0 +1,26 @@
+name: Bug
+description: A reproducible failure in a public or synthetic scenario
+title: 'Bug: '
+labels: ['tech-debt']
+body:
+  - type: markdown
+    attributes:
+      value: 'Use a synthetic reproduction. Remove private identifiers and credentials.'
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and reproduction
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence and affected guardrails
+    validations:
+      required: true

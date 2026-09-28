@@ -26,6 +26,7 @@ export type ToolRuntime = {
   redactor: Redactor;
   maxOutputBytes?: number;
   limiter?: ProviderLimiter;
+  providerWarnings?: Map<string, string>;
 };
 
 /** The sole MCP result exit: validate, redact, cap, audit, and then encode. */
@@ -89,5 +90,7 @@ export async function runTool<T>(
   } finally {
     release?.();
   }
+  const providerWarning = runtime.providerWarnings?.get(provider);
+  if (providerWarning) result.examined.warnings.unshift(providerWarning);
   return emit(runtime, tool, parameters, Math.round(performance.now() - started), outcome, result);
 }

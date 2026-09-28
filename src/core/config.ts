@@ -26,14 +26,19 @@ export const ConfigSchema = z.strictObject({
     maxRows: z.number().int().min(1).max(1000).default(1000),
     maxOutputBytes: z.number().int().min(1024).max(1_048_576).default(65_536),
     maxConcurrentProviderCalls: z.number().int().min(1).max(8).default(2),
+    maxResponseBytes: z.number().int().min(1024).max(10_000_000).default(2_000_000),
+    maxLokiScanBytes: z.number().int().min(1024).max(100_000_000).default(5_000_000),
     timeoutMs: z.number().int().min(1000).max(30000).default(20000),
   }).prefault({}),
   providers: z.strictObject({
     grafana: z.strictObject({
       enabled: z.boolean().default(false),
       baseUrl,
-      tokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
-    }).optional(),
+      tokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]*$/).optional(),
+      tokenFile: absolutePath.optional(),
+      prometheusUid: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+      lokiUid: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    }).refine((value) => !(value.tokenEnv && value.tokenFile), 'Choose tokenEnv or tokenFile').optional(),
     uptime: z.strictObject({
       enabled: z.boolean().default(false),
       baseUrl,
@@ -78,4 +83,8 @@ export function readPrivateCredentialFile(path: string): string {
   const value = readFileSync(path, 'utf8').trim();
   if (!value) throw new Error('Credential file is empty');
   return value;
+}
+
+export function providerTokenFile(path: string): string {
+  return readPrivateCredentialFile(path);
 }

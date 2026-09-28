@@ -1,0 +1,4 @@
+{
+  "sourceNote": "Hand-made synthetic index statistics based on Loki HTTP API: https://grafana.com/docs/loki/latest/reference/loki-http-api/",
+  "response": { "bytes": 100, "entries": 2 }
+}

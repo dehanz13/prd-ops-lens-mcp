@@ -10,12 +10,16 @@ limits:
   maxRows: 1000
   maxOutputBytes: 65536
   maxConcurrentProviderCalls: 2
+  maxResponseBytes: 2000000
+  maxLokiScanBytes: 5000000
   timeoutMs: 20000
 providers:
   grafana:
     enabled: false
     baseUrl: https://grafana.example.invalid
     tokenEnv: OPS_LENS_GRAFANA_TOKEN
+    prometheusUid: demo-prometheus
+    lokiUid: demo-loki
   uptime:
     enabled: false
     baseUrl: https://status.example.invalid

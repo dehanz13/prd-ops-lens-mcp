@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -42,6 +42,15 @@ describe('foundation guardrails', () => {
     expect(readFileSync(path, 'utf8').trim().split('\n')).toHaveLength(1);
     const source = readFileSync(join(process.cwd(), 'src/server.ts'), 'utf8');
     expect(source).not.toMatch(/structuredContent\s*:|content\s*:/);
+    const providerFiles = readdirSync(join(process.cwd(), 'src/providers'))
+      .filter((name) => name.endsWith('.ts'));
+    for (const file of providerFiles) {
+      const providerSource = readFileSync(join(process.cwd(), 'src/providers', file), 'utf8');
+      expect(providerSource).not.toMatch(/structuredContent\s*:|content\s*:/);
+      if (providerSource.includes('server.registerTool(')) {
+        expect(providerSource).toContain('runValidatedTool(');
+      }
+    }
   });
 
   // @guardrail G0.3: field, value, and embedded secret patterns share one redactor.
