@@ -1,0 +1,134 @@
+{
+  "title": "prd-ops-lens-mcp roadmap",
+  "sprintLengthDays": 7,
+  "sprintGoals": {
+    "1": "Deliver the audited MCP foundation and a synthetic Grafana demo that can be run locally.",
+    "2": "Complete bounded Grafana reads and public uptime status reads with replay evidence."
+  },
+  "milestones": [
+    {
+      "id": "A",
+      "name": "Audited MCP foundation",
+      "goal": "Start a local, read-only MCP server with strict configuration, redacted audited results, and a green build gate.",
+      "guardrails": ["G0", "G1", "G11"],
+      "stories": [
+        {"title": "As an operator, I can start the server with validated private configuration so that unsafe settings fail before a tool runs", "priority": "P0", "size": 5, "sprint": 1, "guardrails": ["G0.8", "G0.9", "G0.10", "G1"], "criteria": ["Strict config and file-mode tests reject missing, malformed, or exposed credentials.", "Startup permission tests refuse credentials with write actions.", "A stdio transport test proves the server opens no listening socket."]},
+        {"title": "As an operator, I can see what every tool examined so that an empty answer has context", "priority": "P0", "size": 5, "sprint": 1, "guardrails": ["G0.2", "G0.4", "G0.6", "G0.7"], "criteria": ["Every tool returns through the central result path with an examined block and bounded output.", "Schema, oversized-result, and out-of-bounds tests prove the contract, including zero results."]},
+        {"title": "As a security reviewer, I can trace redaction and refusal behavior so that sensitive data stays out of results and audit logs", "priority": "P0", "size": 8, "sprint": 1, "guardrails": ["G0.1", "G0.3", "G0.5", "G0.11"], "criteria": ["Provider calls outside the method and endpoint allowlist fail before network access.", "Synthetic identity, secret, injection, and refusal tests prove redaction and one audit entry per call."]},
+        {"title": "As a contributor, I can run the same quality gates locally and in CI so that each milestone has reviewable evidence", "priority": "P0", "size": 5, "sprint": 1, "guardrails": ["G11.1", "G11.2", "G11.3", "G11.4", "G11.5"], "criteria": ["Lint, typecheck, tests, evals, guardrail traceability, and secret scanning pass locally.", "CI, dependency, permission, and public documentation checks use synthetic data only."]}
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Grafana observability and synthetic demo",
+      "goal": "Read bounded dashboards, alerts, metrics, and logs through Grafana and prove them with a local synthetic stack.",
+      "guardrails": ["G2"],
+      "stories": [
+        {"title": "As a contributor, I can run a synthetic observability stack so that provider behavior is testable without live data", "priority": "P0", "size": 5, "sprint": 1, "guardrails": ["G2.1", "G2.4"], "criteria": ["A local demo starts with synthetic metrics and logs and has a reproducible smoke command.", "The smoke test proves a dashboard, metric result, and log result without external credentials."]},
+        {"title": "As an on-call engineer, I can find dashboards and alert states so that I can orient an investigation", "priority": "P0", "size": 3, "sprint": 2, "guardrails": ["G2.1", "G2.4"], "criteria": ["Dashboard and alert reads use only allowlisted Grafana endpoints.", "Replay tests cover empty responses, malformed upstream data, and examined metadata."]},
+        {"title": "As an on-call engineer, I can query bounded Prometheus windows so that I can inspect a signal without an expensive scan", "priority": "P0", "size": 5, "sprint": 2, "guardrails": ["G2.1", "G2.2"], "criteria": ["Instant and range reads use Grafana data-source query with UTC windows, row caps, and a minimum step.", "Replay and rejection tests cover series decoding and each query bound."]},
+        {"title": "As an on-call engineer, I can query Loki for a time window so that I can inspect relevant logs within a scan budget", "priority": "P0", "size": 5, "sprint": 2, "guardrails": ["G2.1", "G2.3", "G2.4"], "criteria": ["A read-only index-stats preflight estimates scan size before the bounded Grafana data-source query.", "Tests prove line, window, selector, and scan caps and preserve structured log-code matching."]}
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Public uptime status",
+      "goal": "Summarize public status-page monitors and incidents without exposing monitor configuration.",
+      "guardrails": ["G3"],
+      "stories": [
+        {"title": "As an on-call engineer, I can see public monitor health so that I can separate an outage from a data gap", "priority": "P0", "size": 3, "sprint": 2, "guardrails": ["G3.1"], "criteria": ["Only public status-page JSON endpoints are queried.", "Replay tests use the latest heartbeat and distinguish unknown from up or down."]},
+        {"title": "As an on-call engineer, I can read public incident summaries so that I can relate status changes to an investigation", "priority": "P1", "size": 3, "sprint": 2, "guardrails": ["G3.1", "G3.2"], "criteria": ["Incident summaries preserve public status and timing in an examined result.", "Tests cover absent and malformed incident data without claiming a healthy state."]},
+        {"title": "As a security reviewer, I can prove monitor details remain private so that the tool exposes only public status", "priority": "P0", "size": 2, "sprint": 2, "guardrails": ["G3.2"], "criteria": ["Allowlist output fields omit monitor URLs, tags, and internal configuration.", "A fixture with planted private-looking values proves none appear in results or audit data."]}
+      ]
+    },
+    {
+      "id": "D",
+      "name": "Bounded CloudWatch investigation",
+      "goal": "Read metrics, alarms, and Logs Insights with explicit time and scan budgets.",
+      "guardrails": ["G4"],
+      "stories": [
+        {"title": "As an on-call engineer, I can read CloudWatch metric data so that I can compare service signals over a bounded window", "priority": "P1", "size": 5, "guardrails": ["G4.1"], "criteria": ["Read-only credential preflight and API allowlists gate the provider.", "Replay tests reject broad windows and return UTC examined metadata."]},
+        {"title": "As an on-call engineer, I can inspect alarm states so that I can identify active alerts", "priority": "P1", "size": 3, "guardrails": ["G4.1", "G4.4"], "criteria": ["Alarm reads are paginated and capped with no write permission.", "Replay tests cover active, empty, and truncated results and redact account identifiers."]},
+        {"title": "As an on-call engineer, I can run capped Logs Insights queries so that I can investigate errors without surprise scan cost", "priority": "P1", "size": 8, "guardrails": ["G4.2", "G4.3"], "criteria": ["Log groups come from a config allowlist; start, poll, and stop stay within a one-hour window and scan cap.", "Tests prove timeout cleanup, scan accounting, and refusal for an unlisted group or exceeded cap."]}
+      ]
+    },
+    {
+      "id": "E",
+      "name": "Read-only IAM investigation",
+      "goal": "Explain identity and effective access through least-privilege read tools.",
+      "guardrails": ["G5"],
+      "stories": [
+        {"title": "As an on-call engineer, I can identify the active cloud principal so that access findings have an accountable context", "priority": "P1", "size": 2, "guardrails": ["G5.1"], "criteria": ["STS identity is summarized without credential or account identifiers in public fixtures.", "Tests verify the read-only allowlist and redacted examined result."]},
+        {"title": "As a security reviewer, I can inspect role trust summaries so that I can understand who may assume a role", "priority": "P1", "size": 5, "guardrails": ["G5.2"], "criteria": ["Role listing and trust documents are bounded and summarized as data.", "Replay tests cover pagination, malformed policy documents, and redaction."]},
+        {"title": "As a security reviewer, I can simulate access and review findings so that a permission answer is evidence based", "priority": "P1", "size": 8, "guardrails": ["G5.1", "G5.3"], "criteria": ["Simulation and Access Analyzer reads accept only scoped inputs and read-only actions.", "Tests cover denied, allowed, unknown, and truncated findings with cited inputs."]}
+      ]
+    },
+    {
+      "id": "F",
+      "name": "Read-only product analytics",
+      "goal": "Inspect bounded analytics, error issues, and flag state without exposing event payloads.",
+      "guardrails": ["G6"],
+      "stories": [
+        {"title": "As an on-call engineer, I can run bounded read-only HogQL so that I can measure an incident without changing analytics data", "priority": "P1", "size": 8, "guardrails": ["G6.1", "G6.2"], "criteria": ["Only read-only queries with row, time, and execution caps are accepted.", "Parser and replay tests reject mutation forms and overly broad queries."]},
+        {"title": "As an on-call engineer, I can inspect an insight and error issue so that I can corroborate a production symptom", "priority": "P1", "size": 5, "guardrails": ["G6.2", "G6.3"], "criteria": ["Configured project allowlists gate reads and expose only approved summary fields.", "Replay tests cover missing items and redaction of planted identity values."]},
+        {"title": "As an on-call engineer, I can inspect a feature flag state so that I can understand rollout context", "priority": "P2", "size": 3, "guardrails": ["G6.2", "G6.3"], "criteria": ["Read-only flag state is limited to configured projects and omits private targeting data.", "Tests prove missing flags return unknown with examined context."]}
+      ]
+    },
+    {
+      "id": "G",
+      "name": "VPS status with optional SSH reads",
+      "goal": "Read provider status and tightly allowlisted host diagnostics without shell passthrough.",
+      "guardrails": ["G7"],
+      "stories": [
+        {"title": "As an on-call engineer, I can inspect VPS state and resource use so that I can identify host pressure", "priority": "P1", "size": 5, "guardrails": ["G7.1"], "criteria": ["Provider API calls use a read-scoped token and an endpoint allowlist.", "Replay tests cover state, utilization, pagination, and empty responses."]},
+        {"title": "As an on-call engineer, I can inspect recent provider actions so that I can correlate maintenance with an incident", "priority": "P2", "size": 3, "guardrails": ["G7.1"], "criteria": ["Recent actions are time-capped and returned as untrusted data through the GET allowlist.", "Tests redact planted identifiers and preserve source timestamps."]},
+        {"title": "As a security reviewer, I can opt into fixed SSH diagnostics so that host reads never accept arbitrary shell input", "priority": "P1", "size": 8, "guardrails": ["G7.2", "G7.3"], "criteria": ["SSH is off by default and accepts only named read commands with strict arguments; docs explain Docker group privilege.", "Negative tests reject shell metacharacters, disallowed commands, and excessive log tails."]}
+      ]
+    },
+    {
+      "id": "H",
+      "name": "Incident correlation and guidance",
+      "goal": "Combine cited provider evidence and user-supplied knowledge into safe triage resources and prompts.",
+      "guardrails": ["G8"],
+      "stories": [
+        {"title": "As an on-call engineer, I can view a cited incident timeline so that I can compare events across providers", "priority": "P1", "size": 8, "guardrails": ["G8.1"], "criteria": ["Timeline entries are ordered, deduplicated, and cite exact source queries and UTC windows.", "Synthetic cross-provider tests prove missing-source warnings and no invented events."]},
+        {"title": "As an operator, I can supply a system map and runbooks so that the assistant uses my own operational context", "priority": "P1", "size": 5, "guardrails": ["G8.2"], "criteria": ["Resources load from explicit local paths with file-mode checks and bounded content.", "Tests prove no stack knowledge is hardcoded and reject symlinks outside the configured directory."]},
+        {"title": "As an on-call engineer, I can use triage and review prompts so that investigations follow the same evidence discipline", "priority": "P2", "size": 3, "guardrails": ["G8.3"], "criteria": ["Triage, postmortem, and maintenance prompts cite evidence and mark uncertainty.", "Prompt tests preserve the untrusted-data notice and forbid calls to write tools."]}
+      ]
+    },
+    {
+      "id": "I",
+      "name": "Evaluations with positive controls",
+      "goal": "Measure useful incident answers and prove guardrail tests fail when protections are removed.",
+      "guardrails": ["G10"],
+      "stories": [
+        {"title": "As a contributor, I can replay synthetic incident cases so that answer quality is reproducible", "priority": "P1", "size": 5, "guardrails": ["G10.1"], "criteria": ["A versioned synthetic case set covers healthy, degraded, empty, and partial-provider investigations.", "The evaluator records case counts and scoring rules without live data."]},
+        {"title": "As a security reviewer, I can run positive controls so that guardrail tests prove they detect regressions", "priority": "P0", "size": 5, "guardrails": ["G10.2"], "criteria": ["Each scored guardrail has a deliberate mutation or equivalent positive control.", "CI fails when a required control does not detect its injected violation."]},
+        {"title": "As a reader, I can see measured eval scores so that release claims match the recorded evidence", "priority": "P1", "size": 3, "guardrails": ["G10.1", "G10.2"], "criteria": ["README scores include evaluator version, case count, and date.", "Tests verify the published score source and make missing runs explicit."]}
+      ]
+    },
+    {
+      "id": "J",
+      "name": "Release polish and guarded demo restart",
+      "goal": "Finish public documentation, demonstrate the server, and release only after the guarded demo write path is proven.",
+      "guardrails": ["G9", "G11"],
+      "stories": [
+        {"title": "As an operator, I can plan a demo container restart so that I can review its target and effect before a write", "priority": "P1", "size": 5, "guardrails": ["G9.1", "G9.2"], "criteria": ["The write feature is off by default and only a named demo container may be planned.", "Tests reject absent flag, non-allowlisted target, and server self-targeting."]},
+        {"title": "As an operator, I can confirm one demo restart so that a deliberate write is auditable and bounded", "priority": "P1", "size": 8, "guardrails": ["G9.3", "G9.4", "G9.5"], "criteria": ["A single-use, two-minute token binds host, container, and nonce; reason and health before and after are recorded.", "Negative tests cover replay, expiry, cooldown, deploy lock, and every refusal's audit entry."]},
+        {"title": "As a new contributor, I can follow permissions and demo documentation so that I can reproduce the public examples safely", "priority": "P1", "size": 3, "guardrails": ["G11.1", "G11.2"], "criteria": ["README, provider permission guides, and an asciinema demo use synthetic identifiers only.", "Secret scan and documentation review pass against the release candidate."]},
+        {"title": "As a maintainer, I can tag a production-ready release so that a stable revision has verifiable provenance", "priority": "P1", "size": 5, "guardrails": ["G11.3", "G11.4", "G11.5"], "criteria": ["The release gate includes CI, evals, traceability, SBOM, dependency review, and a signed tag.", "The first release is tagged v0.1.0 only after reviewed code reaches main."]}
+      ]
+    },
+    {
+      "id": "K",
+      "name": "Private agent usage analytics",
+      "goal": "Summarize usage and trends from approved numeric fields without reading transcript content.",
+      "guardrails": ["G12"],
+      "stories": [
+        {"title": "As a maintainer, I can summarize agent usage by safe job label so that I can compare effort without exposing transcripts", "priority": "P1", "size": 8, "guardrails": ["G12.1", "G12.2"], "criteria": ["The parser allowlists numeric usage fields and uses explicit job mappings or session hashes.", "A planted synthetic secret and email never appear in output, logs, or events; a positive control fails without the allowlist."]},
+        {"title": "As a maintainer, I can compare usage trends so that I can detect week-over-week drift", "priority": "P1", "size": 5, "guardrails": ["G12.1", "G12.2"], "criteria": ["Report and trend tools return structured JSON plus a readable table with tokens, duration, tool calls, cache rate, and p50/p95.", "Cost is marked estimated with price-table date unless a billing source proves it."]},
+        {"title": "As a security reviewer, I can verify optional usage exports so that analytics never carry prompts or responses", "priority": "P1", "size": 5, "guardrails": ["G12.3", "G12.4", "G12.5"], "criteria": ["Optional events carry numbers and safe labels only, with prompt and tool-detail export disabled.", "Tests reject prompt properties and keep read, write-only metrics, and optional admin credentials separate."]}
+      ]
+    }
+  ]
+}
