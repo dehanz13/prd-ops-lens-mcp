@@ -46,6 +46,16 @@ const from = '2026-01-01T00:00:00.000Z';
 const to = '2026-01-01T01:00:00.000Z';
 
 describe('Grafana tools', () => {
+  // @guardrail G1.2: plugin write actions fail startup even with an obsolete override flag.
+  it('refuses a write-capable Grafana token at provider startup', async () => {
+    mockServer.use(http.get(`${base}/api/access-control/user/permissions`, () =>
+      HttpResponse.json({ 'dashboards:read': ['*'], 'plugins:execute': ['*'] })));
+    const config = ConfigSchema.parse({ version: 1, audit: { path: '/tmp/synthetic-audit.jsonl' },
+      providers: { grafana: { enabled: true, baseUrl: base, prometheusUid: 'prom', lokiUid: 'loki' } } });
+    await expect(new GrafanaProvider().preflight(config, { OPS_LENS_ALLOW_POWERFUL_GRAFANA: '1' }))
+      .rejects.toThrow('write permissions');
+  });
+
   it('searches dashboards without returning their URLs', async () => {
     mockServer.use(http.get(`${base}/api/search/`, ({ request }) => {
       const url = new URL(request.url);

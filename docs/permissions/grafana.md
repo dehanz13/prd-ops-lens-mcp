@@ -6,9 +6,12 @@ configured `tokenEnv`. Do not reuse an Editor or Admin token.
 
 At startup, the provider calls `GET /api/access-control/user/permissions`. It
 refuses to register tools if that response cannot be read or includes a write
-action. The override `OPS_LENS_ALLOW_POWERFUL_GRAFANA=1` exists for deliberate
-local testing; it adds a warning to every Grafana tool result. A read-scoped
-credential is the normal operating mode.
+action. There is no override for a write-capable credential. A read-scoped
+credential is required for the provider to start.
+
+Set `prometheusUid` and `lokiUid` to Grafana data-source **UIDs**, not display
+names. The server sends those UIDs in `/api/ds/query` and the Loki index-stats
+path. A display name in either field can cause Grafana to return HTTP 404.
 
 The provider allowlist contains only:
 
