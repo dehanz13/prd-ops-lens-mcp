@@ -1,0 +1,4 @@
+# Historical synthetic AWS-shaped values in redaction tests. These two exact
+# findings predate the split fixture at the current head; no path or rule is exempt.
+96302e550a253901ffca37fe43a43d2c8e11e8a7:test/guardrails-foundation.test.ts:aws-access-token:77
+0d861f0a55ce9cae18ac88fcab6bfce6ff51dc5e:test/guardrails-foundation.test.ts:aws-access-token:101

@@ -1,0 +1,27 @@
+name: Spike
+description: A time-boxed technical investigation
+title: 'Spike: '
+labels: ['tech-debt']
+body:
+  - type: markdown
+    attributes:
+      value: 'Keep findings public and synthetic. State the decision that the spike will unblock.'
+  - type: textarea
+    id: question
+    attributes:
+      label: Decision to unblock
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Time box
+      placeholder: '4 hours'
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected output and guardrails
+    validations:
+      required: true

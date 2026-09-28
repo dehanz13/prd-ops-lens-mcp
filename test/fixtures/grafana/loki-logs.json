@@ -1,0 +1,21 @@
+{
+  "sourceNote": "Hand-made synthetic Grafana Loki frame based on the local demo response and https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/",
+  "response": {
+    "results": {
+      "A": {
+        "frames": [{
+          "schema": { "fields": [
+            { "name": "labels", "type": "other" },
+            { "name": "Time", "type": "time" },
+            { "name": "Line", "type": "string" }
+          ] },
+          "data": { "values": [
+            [{ "job": "service-a" }],
+            [1767225600000],
+            ["room:1234:player:abcd failed"]
+          ] }
+        }]
+      }
+    }
+  }
+}

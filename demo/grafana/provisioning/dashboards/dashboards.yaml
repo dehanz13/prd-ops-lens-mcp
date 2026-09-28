@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: Synthetic incident
+    folder: Demo
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

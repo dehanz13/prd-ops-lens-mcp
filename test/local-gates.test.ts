@@ -1,0 +1,30 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { expect, it } from 'vitest';
+
+it('refuses the PR checkout as a status-posting runner', () => {
+  const result = spawnSync('bash', ['scripts/local-gates.sh', 'invalid-sha'], { encoding: 'utf8' });
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain('Refusing a runner from the repository checkout');
+  const script = readFileSync('scripts/local-gates.sh', 'utf8');
+  expect(script).toContain('--network "$network"');
+  expect(script).toContain('--cap-drop ALL');
+  expect(script).toContain('-v "$checkout:/work:ro"');
+  expect(script).toContain('$scratch/dependencies:/work/node_modules:ro');
+  expect(script).toContain('$scratch/dependencies:/work/node_modules:rw');
+  expect(script).toContain('local mounts=(-v');
+  expect(script).toContain('controller stopped before all gates');
+  expect(script).toContain('mktemp -d "$scratch/outputs.XXXXXX"');
+  expect(script).toContain('$outputs/vite-temp:/work/node_modules/.vite-temp:rw');
+  expect(script).toContain('--tmpfs /build:rw');
+  expect(script).toContain('--tmpfs /coverage:rw');
+  expect(script).toContain('--coverage.reportsDirectory=/coverage/report');
+  expect(script).not.toContain('$outputs/dist:/work/dist');
+  expect(script).not.toContain('-v "$scratch:/results"');
+  expect(script).toContain('-e HOME=/tmp');
+  expect(script).not.toContain('-v "$HOME');
+  expect(script).not.toContain('/var/run/docker.sock');
+  expect(script).toContain('"$trusted_dir/private-denylist.mjs"');
+  expect(script).toContain('package manifest absent at SHA');
+  expect(script).not.toContain("stat -f '%u %Lp'");
+});
