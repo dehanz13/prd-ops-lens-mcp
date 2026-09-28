@@ -144,13 +144,14 @@ describe('foundation guardrails', () => {
 });
 
 describe('credential strength preflight', () => {
-  // @guardrail G1.1: AWS write action simulation fails closed; override warns.
+  // @guardrail G1.1: AWS write action simulation fails closed even if an obsolete override argument is supplied.
   it('rejects powerful AWS credentials after identity and policy simulation', async () => {
     const identity = async () => ({ arn: 'arn:aws:iam::000000000000:role/synthetic' });
     const simulate = async (_arn: string, actions: readonly string[]) =>
       Object.fromEntries(actions.map((action) => [action, action === AWS_WRITE_ACTIONS[0]]));
     await expect(checkAwsCredential(identity, simulate)).rejects.toThrow('write permissions');
-    await expect(checkAwsCredential(identity, simulate, true)).resolves.toMatchObject({ warning: expect.stringContaining('WARNING') });
+    await expect((checkAwsCredential as (...args: unknown[]) => Promise<unknown>)(identity, simulate, true))
+      .rejects.toThrow('write permissions');
     await expect(checkAwsCredential(identity, async () => ({}))).rejects.toThrow('could not be verified');
   });
 
@@ -158,7 +159,8 @@ describe('credential strength preflight', () => {
   it('rejects a Grafana token with a write action', () => {
     const permissions = { 'dashboards:read': ['*'], 'dashboards:write': ['*'] };
     expect(() => checkGrafanaPermissions(permissions)).toThrow('write permissions');
-    expect(checkGrafanaPermissions(permissions, true).warning).toContain('WARNING');
+    expect(() => (checkGrafanaPermissions as (...args: unknown[]) => unknown)(permissions, true))
+      .toThrow('write permissions');
     expect(checkGrafanaPermissions({ 'dashboards:read': ['*'] })).toEqual({});
     expect(() => checkGrafanaPermissions({})).toThrow('could not be verified');
   });
