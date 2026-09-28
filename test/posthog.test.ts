@@ -73,6 +73,9 @@ it('rejects mutation, nested, broad, and excessive HogQL before network access',
   const from = '2026-01-01T00:00:00Z'; const to = '2026-01-01T00:10:00Z';
   expect(boundedHogql('SELECT event, count(*) FROM events GROUP BY event', from, to, 10, 60).query)
     .toContain('LIMIT 10');
+  expect(() => boundedHogql('SELECT event FROM events',
+    '2026-01-01T00:00:00.9009Z', '2026-01-01T00:01:00.1259Z', 10, 60))
+    .toThrow('UTC window is invalid');
   expect(boundedHogql("SELECT event FROM events WHERE event = 'a' OR event = 'b'", from, to, 10, 60).query)
     .toContain("WHERE (event = 'a' OR event = 'b') AND timestamp");
   for (const query of ['DELETE FROM events', 'SELECT * FROM events',
@@ -94,6 +97,16 @@ it('rejects mutation, nested, broad, and excessive HogQL before network access',
   const futureFrom = new Date(Date.now() + 120_000).toISOString();
   const futureTo = new Date(Date.now() + 150_000).toISOString();
   expect(() => boundedHogql('SELECT event FROM events', futureFrom, futureTo, 10, 60)).toThrow();
+});
+
+// @guardrail G6.1: SQL predicates must cover exactly the reported millisecond window.
+it('preserves fractional UTC bounds in the generated HogQL predicate', () => {
+  const result = boundedHogql('SELECT event FROM events',
+    '2026-01-01T00:00:00.900Z', '2026-01-01T00:00:01.125Z', 10, 60);
+  expect(result.query).toContain("timestamp >= toDateTime64('2026-01-01 00:00:00.900', 3, 'UTC')");
+  expect(result.query).toContain("timestamp <= toDateTime64('2026-01-01 00:00:01.125', 3, 'UTC')");
+  expect(result.window).toEqual({ from: '2026-01-01T00:00:00.900Z',
+    to: '2026-01-01T00:00:01.125Z' });
 });
 
 // @guardrail G6.3: key scopes and project binding must match the configured allowlist.

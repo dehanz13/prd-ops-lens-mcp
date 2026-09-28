@@ -1,6 +1,6 @@
 version: 1
 audit:
-  path: /tmp/ops-lens-demo-audit.jsonl
+  path: /tmp/ops-lens-demo/audit.jsonl
 redaction:
   identityKeys: [userId, playerId, sessionId]
   identityLabels: [user, player, session, room]

@@ -6,6 +6,7 @@ import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
 import { readPrivateCredentialFile, type Config } from '../core/config.js';
 import { OpsError } from '../core/result.js';
 import { installAwsReadGuard } from './aws-read-guard.js';
+import { completeWriteSimulation } from './aws-write-simulation.js';
 
 type CloudWatchConfig = NonNullable<Config['providers']['cloudwatch']>;
 
@@ -111,14 +112,7 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
     const response = await this.iamClient.send(new SimulatePrincipalPolicyCommand({
       PolicySourceArn: arn, ActionNames: [...actions], ResourceArns: ['*'],
     }), { abortSignal: this.signal() });
-    if (response.IsTruncated) throw new OpsError('REFUSED', 'AWS permission simulation was incomplete');
-    const decisions: Record<string, boolean> = {};
-    for (const result of response.EvaluationResults ?? []) {
-      if (result.EvalActionName && result.EvalDecision) {
-        decisions[result.EvalActionName] = result.EvalDecision === 'allowed';
-      }
-    }
-    return decisions;
+    return completeWriteSimulation(actions, response);
   }
 
   async metric(request: MetricRequest): Promise<{ points: Array<{ at: string; value: number }>; partial: boolean }> {
@@ -144,8 +138,7 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
       MaxRecords: limit, AlarmTypes: ['MetricAlarm', 'CompositeAlarm'],
     }),
       { abortSignal: this.signal() });
-    const all = [...(response.MetricAlarms ?? []), ...(response.CompositeAlarms ?? []),
-      ...(response.LogAlarms ?? [])];
+    const all = [...(response.MetricAlarms ?? []), ...(response.CompositeAlarms ?? [])];
     return { rows: all.slice(0, limit).map((alarm) => ({
       name: alarm.AlarmName ?? 'Unnamed alarm', state: alarm.StateValue ?? 'UNKNOWN',
       updatedAt: alarm.StateUpdatedTimestamp?.toISOString() ?? null,

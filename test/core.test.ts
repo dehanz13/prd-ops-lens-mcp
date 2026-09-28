@@ -1,4 +1,5 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync,
+  symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -118,6 +119,40 @@ describe('redaction and audit', () => {
     const line = readFileSync(path, 'utf8').trim();
     expect(line).not.toContain('player:abc');
     expect(JSON.parse(line).examined.rowCount).toBe(1);
+  });
+
+  // @guardrail G0.11: the audit file cannot be protected inside a shared directory.
+  it('refuses a shared or symlinked audit directory and directory replacement', () => {
+    const path = temporaryFile('audit.jsonl');
+    const directory = join(path, '..');
+    chmodSync(directory, 0o777);
+    expect(() => new AuditLog(path, new Redactor(redactionConfig)))
+      .toThrow('Audit directory must be an owner-only');
+    chmodSync(directory, 0o700);
+    const symlink = temporaryFile('audit-link');
+    symlinkSync(directory, symlink);
+    expect(() => new AuditLog(join(symlink, 'audit.jsonl'), new Redactor(redactionConfig)))
+      .toThrow('Audit directory must be an owner-only');
+    const log = new AuditLog(path, new Redactor(redactionConfig));
+    const moved = `${directory}-moved`;
+    renameSync(directory, moved);
+    dirs.push(moved);
+    expect(() => log.assertReady()).toThrow('Audit directory');
+  });
+
+  // @guardrail G0.11: a later audit append stays bound to its verified inode.
+  it('refuses an audit file replacement or hard link before appending', () => {
+    const path = temporaryFile('audit.jsonl');
+    const log = new AuditLog(path, new Redactor(redactionConfig));
+    renameSync(path, `${path}.original`);
+    writeFileSync(path, 'replacement\n', { mode: 0o600 });
+    const entry = { at: '2026-01-01T00:00:00.000Z', tool: 'test', parameters: {},
+      durationMs: 1, examined: null, outcome: 'ok' as const };
+    expect(() => log.record(entry)).toThrow('original owner-only');
+    expect(readFileSync(path, 'utf8')).toBe('replacement\n');
+    const linked = temporaryFile('linked-audit.jsonl');
+    linkSync(path, linked);
+    expect(() => new AuditLog(linked, new Redactor(redactionConfig))).toThrow('owner-only');
   });
 });
 

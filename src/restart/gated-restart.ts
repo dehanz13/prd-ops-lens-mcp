@@ -53,8 +53,10 @@ export class RestartGate {
     }
     const remembered = this.recent.get(target.id);
     const started = target.lastStartedAt ? Date.parse(target.lastStartedAt) : NaN;
-    const lastRestart = Number.isFinite(started) ? started : 0;
-    if (Math.max(remembered ?? 0, lastRestart) > this.clock() - 600_000) {
+    if (!Number.isFinite(started)) {
+      throw new OpsError('REFUSED', 'Demo container start time could not be verified');
+    }
+    if (Math.max(remembered ?? 0, started) > this.clock() - 600_000) {
       throw new OpsError('REFUSED', 'Demo container restart cooldown is active');
     }
     return { hostId, target };
@@ -98,6 +100,9 @@ export class RestartGate {
       try {
         await this.api.restart(target.id);
         this.recent.set(target.id, this.clock());
+        if (await this.api.identity() !== hostId) {
+          throw new OpsError('REFUSED', 'Local demo host changed after restart');
+        }
         const afterTarget = await this.api.inspect();
         if (afterTarget.id !== target.id || afterTarget.lastStartedAt === target.lastStartedAt) {
           throw new OpsError('REFUSED', 'Demo restart completion could not be verified');
