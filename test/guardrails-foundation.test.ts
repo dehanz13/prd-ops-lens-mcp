@@ -12,7 +12,7 @@ import { examined, ToolResultSchema } from '../src/core/result.js';
 import { ProviderLimiter, runTool, UNTRUSTED_DATA_NOTICE } from '../src/core/tool.js';
 
 const redactor = new Redactor({ identityKeys: ['sessionId'], identityLabels: ['room'],
-  identityValues: ['identity-private'] });
+  identityValues: ['identity-private'], awsIdentifiers: true });
 function audit(): { log: AuditLog; path: string } {
   const path = join(mkdtempSync(join(tmpdir(), 'ops-guardrail-')), 'audit.jsonl');
   return { log: new AuditLog(path, redactor), path };
@@ -172,8 +172,12 @@ describe('credential strength preflight', () => {
       .toThrow('write permissions');
     expect(() => checkGrafanaPermissions({ 'plugins:install': ['*'] }))
       .toThrow('write permissions');
+    expect(() => checkGrafanaPermissions({ 'plugins.app:execute': ['*'] }))
+      .toThrow('write permissions');
     expect(() => checkGrafanaPermissions({ '*': ['*'] })).toThrow('write permissions');
     expect(checkGrafanaPermissions({ 'dashboards:read': ['*'], 'datasources:query': ['*'], 'folders:list': ['*'] })).toEqual({});
+    expect(checkGrafanaPermissions({ 'notifications.alerting.grafana.app/configs:get': ['*'],
+      'plugins.app:access': ['*'] })).toEqual({});
     expect(checkGrafanaPermissions({ 'dashboards:read': ['*'] })).toEqual({});
     expect(() => checkGrafanaPermissions({})).toThrow('could not be verified');
   });

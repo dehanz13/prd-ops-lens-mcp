@@ -8,6 +8,9 @@ At startup, the provider calls `GET /api/access-control/user/permissions`. It
 refuses to register tools if that response cannot be read or includes a write
 action. There is no override for a write-capable credential. A read-scoped
 credential is required for the provider to start.
+The preflight accepts `read`, `list`, `query`, and `get` actions plus Grafana's
+exact `plugins.app:access` Viewer action. Plugin create, write, delete, install,
+and execute actions are refused.
 
 Set `prometheusUid` and `lokiUid` to Grafana data-source **UIDs**, not display
 names. The server sends those UIDs in `/api/ds/query` and the Loki index-stats

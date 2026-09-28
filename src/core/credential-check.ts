@@ -25,7 +25,8 @@ export async function checkAwsCredential(
     ? refusePowerful('AWS') : {};
 }
 
-const grafanaRead = /(?:^|[:.])(?:read|list|query)$/i;
+const grafanaRead = /(?:^|[:.])(?:read|list|query|get)$/i;
+const grafanaNonWriteAccess = new Set(['plugins.app:access']);
 
 export function checkGrafanaPermissions(permissions: Record<string, unknown>): CredentialCheck {
   if (!permissions || typeof permissions !== 'object' || Object.keys(permissions).length === 0) {
@@ -35,7 +36,7 @@ export function checkGrafanaPermissions(permissions: Record<string, unknown>): C
   if (actions.some((action) => !Array.isArray(permissions[action]))) {
     throw new OpsError('REFUSED', 'Grafana permissions could not be verified');
   }
-  return actions.some((action) => !grafanaRead.test(action))
+  return actions.some((action) => !grafanaRead.test(action) && !grafanaNonWriteAccess.has(action))
     ? refusePowerful('Grafana') : {};
 }
 
