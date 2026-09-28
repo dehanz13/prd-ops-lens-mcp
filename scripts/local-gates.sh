@@ -75,6 +75,30 @@ if ! git -C "$root" worktree add --detach "$checkout" "$sha" >"$scratch/worktree
 fi
 cd "$checkout" || exit 2
 
+if [[ ! -f package.json || ! -f package-lock.json ]]; then
+  for name in npm-ci lint typecheck tests evals fixtures guardrails build audit sbom dependency-review; do
+    post "$name" error "self-run, node $node_version; package manifest absent at SHA" || exit 2
+  done
+  if gitleaks git . --no-banner --redact >"$scratch/gitleaks.log" 2>&1; then
+    post gitleaks success "self-run, node $node_version; 0 detected secrets" || exit 2
+  else
+    post gitleaks failure "self-run, node $node_version; secret scan failed" || exit 2
+  fi
+  base=$(git merge-base origin/develop "$sha" 2>/dev/null || true)
+  if [[ -z $base ]]; then
+    post denylist error "self-run, node $node_version; origin/develop unavailable" || exit 2
+  else
+    if printf 'refs/heads/local %s refs/heads/develop %s\n' "$sha" "$base" |
+      node "$trusted_dir/private-denylist.mjs" >"$scratch/denylist.log" 2>&1; then
+      post denylist success "self-run, node $node_version; 0 private-term matches" || exit 2
+    else
+      post denylist failure "self-run, node $node_version; private scan refused" || exit 2
+    fi
+  fi
+  printf 'Package manifest absent at %s; project gates could not run.\n' "$sha" >&2
+  exit 1
+fi
+
 container() {
   local network=$1
   shift

@@ -13,4 +13,5 @@ it('refuses the PR checkout as a status-posting runner', () => {
   expect(script).not.toContain('-v "$HOME');
   expect(script).not.toContain('/var/run/docker.sock');
   expect(script).toContain('"$trusted_dir/private-denylist.mjs"');
+  expect(script).toContain('package manifest absent at SHA');
 });
