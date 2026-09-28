@@ -4,9 +4,14 @@ set -euo pipefail
 # Install this reviewed controller outside the repository before running it.
 # The checkout under test is untrusted and never receives host credentials.
 repo=dehanz13/prd-ops-lens-mcp
-root=$(git rev-parse --show-toplevel) || exit 2
 runner=$(realpath "${BASH_SOURCE[0]}")
 trusted_dir=$(dirname "$runner")
+current_dir=$(pwd -P)
+if [[ -e $current_dir/.git && $runner == "$current_dir"/* ]]; then
+  printf 'Refusing a runner from the repository checkout. Install the reviewed runner and helpers outside the repo.\n' >&2
+  exit 2
+fi
+root=$(git rev-parse --show-toplevel) || exit 2
 if [[ $runner == "$root"/* ]]; then
   printf 'Refusing a runner from the repository checkout. Install the reviewed runner and helpers outside the repo.\n' >&2
   exit 2
