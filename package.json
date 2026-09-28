@@ -1,0 +1,52 @@
+{
+  "name": "prd-ops-lens-mcp",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "prd-ops-lens-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "test:unit": "vitest run",
+    "evals": "node --import tsx evals/run.ts",
+    "fixtures:lint": "node scripts/lint-fixtures.mjs",
+    "guardrails": "node scripts/check-guardrails.mjs",
+    "sbom": "npm sbom --package-lock-only --sbom-format cyclonedx",
+    "check": "npm run lint && npm run typecheck && npm test && npm run evals && npm run guardrails",
+    "secret-scan": "gitleaks git . --no-banner --redact",
+    "smoke:demo": "npm run build && node scripts/smoke-demo.mjs",
+    "smoke:demo:uptime": "npm run build && node scripts/smoke-uptime-demo.mjs",
+    "smoke:demo:restart": "npm run build && node scripts/smoke-demo-restart.mjs",
+    "demo:record": "npm run build && node scripts/record-demo.mjs",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-accessanalyzer": "^3.1141.0",
+    "@aws-sdk/client-cloudwatch": "^3.1141.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
+    "@aws-sdk/client-iam": "^3.1141.0",
+    "@aws-sdk/client-sts": "^3.1141.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "yaml": "^2.8.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^5.0.2",
+    "eslint": "^9.0.0",
+    "msw": "^2.15.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^5.0.2"
+  }
+}

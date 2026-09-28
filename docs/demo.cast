@@ -1,0 +1,3 @@
+{"version":2,"width":100,"height":24,"timestamp":1790570461,"title":"Synthetic MCP demo","env":{"TERM":"xterm-256color"}}
+[0,"o","$ node scripts/smoke-demo.mjs\r\n"]
+[0.45962349999999996,"o","{\"result\":\"pass\",\"dashboards\":1,\"metricRows\":1,\"hostMetricRows\":1,\"logRows\":20,\"lokiScannedBytes\":0}\r\n"]

@@ -50,3 +50,18 @@ the Board, Sprint, and Roadmap views but cannot set their grouping. For a new
 Project, group Board by Status, Sprint by Sprint, and Roadmap by Milestone in
 the UI, then rerun `--apply`. Existing card fields are preserved on reruns;
 reconcile a partially configured card manually.
+
+## Local and hosted verification
+
+For each new PR head, run the owner-only installed controller described in
+`CONTRIBUTING.md` with the full commit SHA. The controller creates a fresh
+temporary worktree at that exact commit, installs from the lockfile, and runs
+lint, typecheck, coverage tests, evals, guardrail traceability, build,
+production dependency audit, SBOM generation, gitleaks, and the private
+denylist. It posts `local/*` commit statuses with measured counts and the Node
+version. An unavailable gate gets `error`, never `success`; the GitHub PR
+dependency-review action remains unavailable locally.
+
+These statuses record self-run evidence. They do not replace the repository's
+GitHub Actions checks. Rerun hosted CI at every open PR head and require green
+hosted checks on the release commit before merging or tagging it.

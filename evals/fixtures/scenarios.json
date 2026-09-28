@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "note": "Handmade synthetic MCP result shapes based on the provider contracts documented in docs/permissions and docs/incident-timeline.md. No live response was recorded.",
+  "cases": [
+    {
+      "id": "db-pool-saturation", "fault": "Database connection pool saturation", "marker": "pool exhausted",
+      "keySource": 0, "shapeSource": "Loki log row: at and line",
+      "sources": [{ "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-db\"}",
+        "data": [{ "at": "2026-01-01T00:10:00.000Z", "line": "synthetic pool exhausted" }] }]
+    },
+    {
+      "id": "vanished-alert-metric", "fault": "Scrape target disappeared and no metric series was returned", "marker": "scrape target absent",
+      "keySource": 0, "shapeSource": "Loki log row and Prometheus range rows",
+      "sources": [
+        { "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-scraper\"}",
+          "data": [{ "at": "2026-01-01T00:12:00.000Z", "line": "synthetic scrape target absent" }] },
+        { "tool": "prometheus_range", "provider": "grafana/prometheus", "query": "demo_request_total", "data": [] }
+      ]
+    },
+    {
+      "id": "api-key-mismatch", "fault": "Configured API key does not match the target project", "marker": "credential rejected",
+      "keySource": 0, "shapeSource": "Loki log row: at and line",
+      "sources": [{ "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-api\"}",
+        "data": [{ "at": "2026-01-01T00:14:00.000Z", "line": "synthetic credential rejected by target" }] }]
+    },
+    {
+      "id": "hot-item", "fault": "One database item causes repeated transaction cancellations", "marker": "transaction cancelled",
+      "keySource": 0, "shapeSource": "CloudWatch Logs Insights row: @timestamp and @message",
+      "sources": [{ "tool": "cloudwatch_logs_insights", "provider": "cloudwatch", "query": "fields @timestamp, @message | limit 10",
+        "data": [{ "@timestamp": "2026-01-01T00:16:00.000Z", "@message": "synthetic transaction cancelled for hot item" }] }]
+    },
+    {
+      "id": "relay-outage", "fault": "A relay is down beyond the recovery window", "marker": "relay down",
+      "keySource": 0, "shapeSource": "Uptime status result: monitors with observedAt and state",
+      "sources": [{ "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
+        "data": { "state": "available", "incidents": [], "monitors": [{ "name": "relay down", "state": "down", "observedAt": "2026-01-01T00:18:00.000Z" }] } }]
+    },
+    {
+      "id": "flapping-monitor", "fault": "A monitor alternates between up and down", "marker": "edge check (down)",
+      "keySource": 1, "shapeSource": "Two Uptime status results at separate observedAt times",
+      "sources": [
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
+          "data": { "state": "available", "incidents": [], "monitors": [{ "name": "edge check", "state": "up", "observedAt": "2026-01-01T00:20:00.000Z" }] } },
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
+          "data": { "state": "available", "incidents": [], "monitors": [{ "name": "edge check", "state": "down", "observedAt": "2026-01-01T00:22:00.000Z" }] } }
+      ]
+    },
+    {
+      "id": "disk-pressure", "fault": "Host filesystem free space is critically low", "marker": "disk nearly full",
+      "keySource": 0, "shapeSource": "Loki log row and Prometheus range point",
+      "sources": [
+        { "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-host\"}",
+          "data": [{ "at": "2026-01-01T00:24:00.000Z", "line": "synthetic disk nearly full" }] },
+        { "tool": "prometheus_range", "provider": "grafana/prometheus", "query": "node_filesystem_avail_bytes",
+          "data": [{ "at": "2026-01-01T00:24:00.000Z", "value": "1024" }] }
+      ]
+    },
+    {
+      "id": "error-spike", "fault": "A new application error causes elevated failures", "marker": "open",
+      "keySource": 0, "shapeSource": "PostHog error issue summary: reference, status, firstSeen",
+      "sources": [{ "tool": "posthog_error_issues", "provider": "posthog", "query": "GET error issue summaries",
+        "data": [{ "reference": "synthetic-issue", "status": "open", "firstSeen": "2026-01-01T00:26:00.000Z" }] }]
+    },
+    {
+      "id": "cache-latency", "fault": "Cache latency breaches its alarm threshold", "marker": "latency high",
+      "keySource": 0, "shapeSource": "CloudWatch alarm row: name, state, updatedAt",
+      "sources": [{ "tool": "cloudwatch_alarms", "provider": "cloudwatch", "query": "DescribeAlarms MetricAlarm,CompositeAlarm limit=50",
+        "data": [{ "name": "cache latency high", "state": "ALARM", "updatedAt": "2026-01-01T00:28:00.000Z" }] }]
+    },
+    {
+      "id": "deploy-regression", "fault": "A synthetic deployment introduced a request failure", "marker": "new build returns errors",
+      "keySource": 0, "shapeSource": "Loki log row and Uptime monitor result",
+      "sources": [
+        { "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-web\"}",
+          "data": [{ "at": "2026-01-01T00:30:00.000Z", "line": "synthetic new build returns errors" }] },
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
+          "data": { "state": "available", "incidents": [], "monitors": [{ "name": "web check", "state": "down", "observedAt": "2026-01-01T00:31:00.000Z" }] } }
+      ]
+    }
+  ]
+}

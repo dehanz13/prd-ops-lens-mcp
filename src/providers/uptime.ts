@@ -1,0 +1,188 @@
+import type { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod';
+import { auditedInput, runValidatedTool } from '../core/audited-input.js';
+import type { Config } from '../core/config.js';
+import { BoundedHttpClient } from '../core/http.js';
+import { examined, OpsError, ToolResultSchema, type ToolResult } from '../core/result.js';
+import { UNTRUSTED_DATA_NOTICE, type ToolRuntime } from '../core/tool.js';
+import type { ProviderModule } from './provider.js';
+
+const inputSchema = z.object({});
+const heartbeatSchema = z.object({
+  status: z.number().int(), time: z.string(),
+}).passthrough();
+const groupSchema = z.object({
+  name: z.string(),
+  monitorList: z.array(z.object({
+    id: z.union([z.string(), z.number()]), name: z.string(), url: z.string().optional(),
+  }).passthrough()),
+}).passthrough();
+
+type UptimeConfig = NonNullable<Config['providers']['uptime']>;
+type Context = { config: Config; runtime: ToolRuntime; uptime: UptimeConfig; client: BoundedHttpClient };
+
+export function uptimeRoutes(slug: string) {
+  return [
+    { method: 'GET' as const, path: `/api/status-page/${slug}` },
+    { method: 'GET' as const, path: `/api/status-page/heartbeat/${slug}` },
+  ];
+}
+
+function safeLabel(value: string, hostnames: readonly string[]): string {
+  let result = value.replace(/https?:\/\/[^\s]+/gi, '[REDACTED]')
+    .replace(/\b(?:[a-z0-9_-]+\.)+[a-z]{2,}\b/gi, '[REDACTED]')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[REDACTED]');
+  for (const host of hostnames) {
+    result = result.replace(new RegExp(escapeRegExp(host), 'gi'), '[REDACTED]');
+  }
+  return result.slice(0, 200);
+}
+
+function monitorHosts(groups: z.output<typeof groupSchema>[]): string[] {
+  const hosts = new Set<string>();
+  for (const group of groups) for (const monitor of group.monitorList) {
+    if (!monitor.url) continue;
+    try {
+      const hostname = new URL(monitor.url).hostname;
+      if (hostname) hosts.add(hostname);
+    } catch { /* Invalid public URLs are never returned. */ }
+  }
+  return [...hosts].sort((a, b) => b.length - a.length);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function statusName(value: number): 'down' | 'up' | 'pending' | 'maintenance' | 'unknown' {
+  return ({ 0: 'down', 1: 'up', 2: 'pending', 3: 'maintenance' } as Record<number, 'down' | 'up' | 'pending' | 'maintenance'>)[value] ?? 'unknown';
+}
+
+function unambiguousTime(value: string): string | null {
+  const native = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value);
+  const candidate = native ? `${value.replace(' ', 'T')}Z` : value;
+  if (!native && !/(?:Z|[+-]\d{2}:\d{2})$/.test(candidate)) return null;
+  const parsed = Date.parse(candidate);
+  if (!Number.isFinite(parsed)) return null;
+  const normalized = new Date(parsed).toISOString();
+  if (native && normalized.slice(0, 19) !== candidate.slice(0, 19)) return null;
+  return normalized;
+}
+
+export class UptimeProvider implements ProviderModule {
+  readonly id = 'uptime';
+
+  register(server: McpServer, context: { config: Config; runtime: ToolRuntime }): void {
+    const uptime = context.config.providers.uptime;
+    if (!uptime?.enabled) return;
+    const client = new BoundedHttpClient(uptime.baseUrl, undefined, context.config.limits.timeoutMs,
+      context.config.limits.maxResponseBytes, 'Uptime Kuma', uptimeRoutes(uptime.slug), true);
+    const ctx: Context = { ...context, uptime, client };
+    server.registerTool('uptime_status', {
+      description: `Read a public status page, current monitor heartbeat, and incident summaries. ${UNTRUSTED_DATA_NOTICE}`,
+      inputSchema: auditedInput(inputSchema), outputSchema: ToolResultSchema,
+      annotations: { readOnlyHint: true },
+    }, async (raw) => runValidatedTool(ctx.runtime, 'uptime_status', 'uptime', raw, inputSchema,
+      () => this.status(ctx)));
+  }
+
+  private async status(ctx: Context): Promise<ToolResult> {
+    const started = new Date().toISOString();
+    const statusPath = `/api/status-page/${ctx.uptime.slug}`;
+    const heartbeatPath = `/api/status-page/heartbeat/${ctx.uptime.slug}`;
+    let statusBody: unknown;
+    let heartbeatBody: unknown;
+    let bytes = 0;
+    try {
+      const status = await ctx.client.get(statusPath);
+      statusBody = status.body;
+      bytes = status.bytes;
+    } catch (error) {
+      if (error instanceof OpsError && error.code === 'NOT_FOUND') {
+        return this.unavailable(started, 'Public status page is not published', 0, 'not_published');
+      }
+      return this.unavailable(started, 'Public status page data is unavailable');
+    }
+
+    const publication = z.object({ config: z.object({ published: z.boolean() }).passthrough() })
+      .passthrough().safeParse(statusBody);
+    if (publication.success && !publication.data.config.published) {
+      return this.unavailable(started, 'Public status page is not published', bytes, 'not_published');
+    }
+
+    try {
+      const heartbeats = await ctx.client.get(heartbeatPath);
+      heartbeatBody = heartbeats.body;
+      bytes += heartbeats.bytes;
+    } catch {
+      return this.unavailable(started, 'Public status page heartbeat data is unavailable', bytes);
+    }
+
+    const page = z.object({ config: z.object({ published: z.boolean() }).passthrough(),
+      incidents: z.array(z.unknown()), publicGroupList: z.array(groupSchema),
+    }).passthrough().safeParse(statusBody);
+    const heartbeat = z.object({
+      heartbeatList: z.record(z.string(), z.array(heartbeatSchema)),
+      uptimeList: z.record(z.string(), z.number()),
+    }).passthrough().safeParse(heartbeatBody);
+    if (!page.success || !heartbeat.success) {
+      return this.unavailable(started, 'Public status page data is incomplete', bytes);
+    }
+    if (page.data.publicGroupList.every((group) => group.monitorList.length === 0) &&
+      page.data.incidents.length === 0) {
+      return this.unavailable(started, 'Public status page has no published monitors', bytes);
+    }
+
+    const warnings: string[] = [];
+    let scanned = 0;
+    const hostnames = monitorHosts(page.data.publicGroupList);
+    const monitors = page.data.publicGroupList.flatMap((group) => group.monitorList.map((monitor) => {
+      const list = heartbeat.data.heartbeatList[String(monitor.id)];
+      scanned += list?.length ?? 0;
+      const newest = list?.at(-1);
+      const observedAt = newest ? unambiguousTime(newest.time) : null;
+      const ageMs = observedAt ? Date.now() - Date.parse(observedAt) : Number.POSITIVE_INFINITY;
+      const fresh = ageMs >= 0 && ageMs <= ctx.uptime.maxHeartbeatAgeSeconds * 1000;
+      const state = newest && fresh ? statusName(newest.status) : 'unknown';
+      if (state === 'unknown') warnings.push('A monitor has no usable heartbeat');
+      if (newest && !observedAt) warnings.push('A heartbeat time was invalid or ambiguous; timestamp omitted');
+      if (newest && observedAt && !fresh) warnings.push('A monitor heartbeat is stale or future-dated');
+      const uptime24 = heartbeat.data.uptimeList[`${monitor.id}_24`];
+      return {
+        group: safeLabel(group.name, hostnames), name: safeLabel(monitor.name, hostnames), state,
+        observedAt,
+        uptime24h: uptime24 !== undefined && uptime24 >= 0 && uptime24 <= 1 ? uptime24 : null,
+      };
+    }));
+    const limit = ctx.config.limits.maxRows;
+    const incidents = page.data.incidents.slice(0, limit).map((item) => {
+      const parsed = z.object({ title: z.string().optional(), status: z.string().optional(),
+        createdDate: z.string().optional(), lastUpdatedDate: z.string().optional() })
+        .passthrough().safeParse(item);
+      return { title: parsed.success ? safeLabel(parsed.data.title ?? 'Untitled incident', hostnames) : 'Untitled incident',
+        status: parsed.success ? safeLabel(parsed.data.status ?? 'unknown', hostnames) : 'unknown',
+        createdAt: parsed.success && parsed.data.createdDate
+          ? unambiguousTime(parsed.data.createdDate) : null,
+        updatedAt: parsed.success && parsed.data.lastUpdatedDate
+          ? unambiguousTime(parsed.data.lastUpdatedDate) : null };
+    });
+    const trimmed = monitors.slice(0, limit);
+    const truncated = monitors.length > limit || page.data.incidents.length > limit;
+    if (truncated) warnings.push('Status page result capped');
+    return { data: { state: 'available', monitors: trimmed, incidents },
+      examined: examined('uptime', `GET public status page and heartbeat for configured slug`, {
+        window: { from: started, to: new Date().toISOString() },
+        rowCount: trimmed.length + incidents.length, scannedCount: Math.max(scanned, monitors.length),
+        byteCount: bytes, truncated, warnings: [...new Set(warnings)],
+      }) };
+  }
+
+  private unavailable(started: string, warning: string, bytes = 0,
+    state: 'unknown' | 'not_published' = 'unknown'): ToolResult {
+    return { data: { state, monitors: [], incidents: [] },
+      examined: examined('uptime', 'GET public status page and heartbeat for configured slug', {
+        window: { from: started, to: new Date().toISOString() }, byteCount: bytes,
+        warnings: [warning],
+      }) };
+  }
+}

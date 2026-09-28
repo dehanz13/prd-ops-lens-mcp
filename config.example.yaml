@@ -1,0 +1,76 @@
+version: 1
+audit:
+  path: /tmp/ops-lens-demo-audit.jsonl
+redaction:
+  identityKeys: [userId, playerId, sessionId]
+  identityLabels: [user, player, session, room]
+  identityValues: []
+  awsIdentifiers: true
+limits:
+  maxWindowMinutes: 60
+  maxRows: 1000
+  maxOutputBytes: 65536
+  maxConcurrentProviderCalls: 2
+  maxResponseBytes: 2000000
+  maxLokiScanBytes: 5000000
+  timeoutMs: 20000
+providers:
+  grafana:
+    enabled: false
+    baseUrl: https://grafana.example.invalid
+    tokenEnv: OPS_LENS_GRAFANA_TOKEN
+    prometheusUid: demo-prometheus
+    lokiUid: demo-loki
+  uptime:
+    enabled: false
+    baseUrl: https://status.example.invalid
+    slug: demo
+  cloudwatch:
+    enabled: false
+    region: us-east-1
+    profile: readonly-demo
+    credentialsFile: /private/path/to/readonly-aws-credentials
+    logGroups:
+      - /demo/example
+    maxLogWindowMinutes: 60
+    maxScanBytes: 5000000
+  iam:
+    enabled: false
+    region: us-east-1
+    profile: readonly-iam-demo
+    credentialsFile: /private/path/to/readonly-iam-credentials
+    roleNames: [demo-observer]
+    analyzerArn: arn:aws:access-analyzer:us-east-1:000000000000:analyzer/demo-external
+  posthog:
+    enabled: false
+    baseUrl: https://us.posthog.com
+    tokenFile: /private/path/to/posthog-readonly.token
+    projectIds: [12345]
+  # Local transcript analytics never reads message or tool content fields.
+  # agentUsage:
+  #   enabled: false
+  #   files: [/private/path/to/synthetic-codex.jsonl]
+  #   jobLabels: {synthetic-session-id: PR-123}
+  #   jobKinds: {synthetic-session-id: feature}
+  #   priceTable:
+  #     asOf: 2026-01-01
+  #     models:
+  #       synthetic-model-v1:
+  #         inputPerMillionUsd: 1
+  #         outputPerMillionUsd: 2
+  #         cacheReadPerMillionUsd: 0.1
+  #         cacheWritePerMillionUsd: 1.25
+# Optional local knowledge. Keep the directory and its files owner-only.
+# resources:
+#   directory: /private/path/to/ops-lens-resources
+#   systemMap: system-map.md
+#   runbooks: [incident-triage.md]
+writes:
+  enabled: false
+  demoOnly: true
+  containers: []
+  # For a local Docker Desktop demo only, see docs/permissions/demo-restart.md.
+  # dockerSocket: /absolute/path/to/.docker/run/docker.sock
+  # expectedDaemonId: local-demo-host-id
+  # killSwitchFile: /private/path/to/ops-lens-demo.kill
+  # deployLockFile: /private/path/to/ops-lens-demo.deploy-lock

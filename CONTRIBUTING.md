@@ -8,8 +8,9 @@ Each new tool needs a Zod input schema, a validated `data` plus `examined` resul
 
 PR descriptions should state what changed, why, test evidence, touched guardrail IDs, references, and remaining work. Do not include attribution boilerplate or private operational details.
 
-While GitHub Actions is unavailable, install the reviewed local-gate controller
-and its three helper scripts into an owner-only directory outside the checkout:
+For independent exact-commit verification, install the reviewed local-gate
+controller and its three helper scripts into an owner-only directory outside
+the checkout:
 
 ```sh
 install -d -m 700 ~/.config/prd-ops-lens-mcp/trusted-gates
@@ -25,9 +26,9 @@ socket; only the trusted host controller posts `local/*` statuses. The private
 fixture and denylist scans use trusted helpers outside the PR checkout. The
 controller refuses to run from inside the repository. A non-runnable gate
 reports `error`, and local status is never described as hosted CI. Do not
-request a merge while the PR head differs from the SHA that was checked. Once
-Actions starts again, rerun CI on every open PR head and use the hosted results
-for merge decisions. No release tag, package publication, provenance, or
+request a merge while the PR head differs from the SHA that was checked. Rerun
+GitHub Actions on every open PR head and use the hosted results for merge
+decisions. No release tag, package publication, provenance, or
 Scorecard claim is made before the release commit passes hosted CI.
 
 ## Definition of Ready
