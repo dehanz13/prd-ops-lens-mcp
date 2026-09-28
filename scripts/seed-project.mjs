@@ -142,7 +142,6 @@ function ensureFields(number) {
     ['Status', ['Backlog', 'Ready', 'In progress', 'In review', 'Done']],
     ['Priority', ['P0', 'P1', 'P2']],
     ['Size', ['1', '2', '3', '5', '8']],
-    ['Milestone', 'ABCDEFGHIJK'.split('')],
   ]) {
     if (!get(name)) {
       gh(['project', 'field-create', String(number), '--owner', owner, '--name', name,
@@ -154,12 +153,13 @@ function ensureFields(number) {
       const colors = name === 'Status' ? ['GRAY', 'BLUE', 'YELLOW', 'PURPLE', 'GREEN'] : options.map(() => 'GRAY');
       const optionInputs = options.map((option, index) =>
         `{name:${JSON.stringify(option)},color:${colors[index]},description:${JSON.stringify(option)}}`).join(',');
-      graphql(`mutation { updateProjectV2Field(input:{fieldId:${JSON.stringify(field.id)},singleSelectOptions:[${optionInputs}]}) { projectV2Field { id } } }`);
+      graphql(`mutation { updateProjectV2Field(input:{fieldId:${JSON.stringify(field.id)},singleSelectOptions:[${optionInputs}]}) { projectV2Field { __typename } } }`);
     }
   }
+  if (!get('Milestone')) throw new Error('GitHub did not provide its issue-derived Milestone field');
   if (!get('Sprint')) {
     const [first, second] = sprintStartDates();
-    graphql(`mutation { createProjectV2Field(input:{projectId:${JSON.stringify(project.id)},name:"Sprint",dataType:ITERATION,iterationConfiguration:{duration:7,startDate:${JSON.stringify(first)},iterations:[{title:"Sprint 1",startDate:${JSON.stringify(first)},duration:7},{title:"Sprint 2",startDate:${JSON.stringify(second)},duration:7}]}}) { projectV2Field { id } } }`);
+    graphql(`mutation { createProjectV2Field(input:{projectId:${JSON.stringify(project.id)},name:"Sprint",dataType:ITERATION,iterationConfiguration:{duration:7,startDate:${JSON.stringify(first)},iterations:[{title:"Sprint 1",startDate:${JSON.stringify(first)},duration:7},{title:"Sprint 2",startDate:${JSON.stringify(second)},duration:7}]}}) { projectV2Field { __typename } } }`);
   }
   project = projectState(number);
   const fieldNames = ['Status', 'Priority', 'Size', 'Sprint', 'Milestone'];
@@ -167,20 +167,21 @@ function ensureFields(number) {
   return project;
 }
 
-function ensureViews(number, project) {
-  const byName = Object.fromEntries(project.fields.nodes.map((field) => [field.name, Number(field.databaseId)]));
-  for (const name of ['Status', 'Priority', 'Size', 'Sprint', 'Milestone']) {
-    if (!Number.isInteger(byName[name])) throw new Error(`Missing numeric ID for ${name} field`);
-  }
-  const userId = json(['api', `users/${owner}`]).id;
-  const path = `users/${userId}/projectsV2/${number}/views`;
-  const visible = ['Status', 'Priority', 'Size', 'Sprint', 'Milestone'].map((name) => byName[name]);
+function ensureViews(project) {
+  const byName = Object.fromEntries(project.fields.nodes.map((field) => [field.name, field.id]));
+  const visible = ['Status', 'Priority', 'Size', 'Sprint', 'Milestone'].map((name) => {
+    if (!byName[name]) throw new Error(`Missing ${name} field for project view`);
+    return byName[name];
+  });
   for (const view of [
-    { name: 'Board', layout: 'board', filter: 'label:story', visible_fields: visible, vertical_group_by: [byName.Status] },
-    { name: 'Sprint', layout: 'table', filter: 'label:story', visible_fields: visible, group_by: [byName.Sprint] },
-    { name: 'Roadmap', layout: 'roadmap', filter: 'label:epic', group_by: [byName.Milestone] },
+    { name: 'Board', layout: 'BOARD_LAYOUT' },
+    { name: 'Sprint', layout: 'TABLE_LAYOUT' },
+    { name: 'Roadmap', layout: 'ROADMAP_LAYOUT' },
   ]) {
-    if (!project.views.nodes.some((existing) => existing.name === view.name)) api('POST', path, view);
+    if (!project.views.nodes.some((existing) => existing.name === view.name)) {
+      const configuration = view.layout === 'ROADMAP_LAYOUT' ? '' : `,configuration:{visibleFieldIds:${JSON.stringify(visible)}}`;
+      graphql(`mutation { createProjectV2View(input:{projectId:${JSON.stringify(project.id)},name:${JSON.stringify(view.name)},layout:${view.layout}${configuration}}) { projectV2View { id name layout } } }`);
+    }
   }
 }
 
@@ -188,6 +189,23 @@ function ensureLabels() {
   for (const [name, [color, description]] of Object.entries(labels)) {
     gh(['label', 'create', name, '--repo', repo, '--color', color, '--description', description, '--force']);
   }
+}
+
+function ensureMilestones() {
+  const existing = api('GET', `repos/${repo}/milestones?state=all&per_page=100`);
+  const titles = new Set(existing.map((milestone) => milestone.title));
+  for (const milestone of plan.milestones) {
+    if (!titles.has(milestone.id)) {
+      api('POST', `repos/${repo}/milestones`, {
+        title: milestone.id,
+        description: `${milestone.name}: ${milestone.goal}`,
+      });
+    }
+  }
+}
+
+function setIssueMilestone(issue, milestone) {
+  gh(['issue', 'edit', String(issue.number), '--repo', repo, '--milestone', milestone]);
 }
 
 function issueBody(milestone, story, epicNumber, storyIndex) {
@@ -245,8 +263,9 @@ function main() {
   gh(['auth', 'status']);
   const number = ensureProject();
   const project = ensureFields(number);
-  ensureViews(number, project);
+  ensureViews(project);
   ensureLabels();
+  ensureMilestones();
   const existing = json(['issue', 'list', '--repo', repo, '--state', 'all', '--limit', '200', '--json', 'number,title,url,body']);
   const issues = new Map(existing.map((issue) => [issue.title, issue]));
   const listed = json(['project', 'item-list', String(number), '--owner', owner, '--limit', '200', '--format', 'json']);
@@ -258,7 +277,7 @@ function main() {
   for (const milestone of plan.milestones) {
     const epic = ensureIssue(issues, `Epic: ${milestone.name}`, epicBody(milestone), ['epic', 'guardrail']);
     ensureProjectItem(number, itemUrls, epic);
-    setField(number, epic, 'Milestone', milestone.id);
+    setIssueMilestone(epic, milestone.id);
     setField(number, epic, 'Status', 'Backlog');
     const children = [];
     for (const [storyIndex, story] of milestone.stories.entries()) {
@@ -270,7 +289,7 @@ function main() {
       ensureProjectItem(number, itemUrls, issue);
       setField(number, issue, 'Priority', story.priority);
       setField(number, issue, 'Size', story.size);
-      setField(number, issue, 'Milestone', milestone.id);
+      setIssueMilestone(issue, milestone.id);
       setField(number, issue, 'Status', story.sprint === 1 ? 'Ready' : 'Backlog');
       if (story.sprint) setIteration(number, issue, story.sprint, project);
       children.push(issue);
