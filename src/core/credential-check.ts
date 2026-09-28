@@ -41,18 +41,17 @@ export function checkGrafanaPermissions(permissions: Record<string, unknown>): C
 }
 
 export function checkPostHogScopes(
-  scopes: readonly string[], projectIds: readonly string[],
+  scopes: readonly string[], projectIds: readonly number[], scopedTeams: readonly number[],
+  scopedOrganizations: readonly string[] = [],
 ): CredentialCheck {
-  if (projectIds.length === 0 || scopes.length === 0) {
+  if (projectIds.length === 0 || scopes.length === 0 || scopedTeams.length === 0) {
     throw new OpsError('REFUSED', 'PostHog scopes could not be verified');
   }
-  for (const projectId of projectIds) {
-    if (!scopes.includes(`project:${projectId}:read`)) {
-      throw new OpsError('REFUSED', 'PostHog project read scope is missing');
-    }
-  }
-  if (scopes.some((scope) => !/^project:[^:]+:read$/.test(scope) ||
-    !projectIds.includes(scope.split(':')[1] ?? ''))) {
+  const expected = new Set(['query:read', 'insight:read', 'error_tracking:read', 'feature_flag:read']);
+  if (scopes.length !== expected.size || scopes.some((scope) => !expected.has(scope)) ||
+    new Set(scopes).size !== expected.size || scopedOrganizations.length !== 0 ||
+    scopedTeams.length !== projectIds.length ||
+    scopedTeams.some((id) => !projectIds.includes(id)) || new Set(scopedTeams).size !== scopedTeams.length) {
     throw new OpsError('REFUSED', 'PostHog scope exceeds configured read access');
   }
   return {};

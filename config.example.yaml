@@ -41,6 +41,11 @@ providers:
     credentialsFile: /private/path/to/readonly-iam-credentials
     roleNames: [demo-observer]
     analyzerArn: arn:aws:access-analyzer:us-east-1:000000000000:analyzer/demo-external
+  posthog:
+    enabled: false
+    baseUrl: https://us.posthog.com
+    tokenFile: /private/path/to/posthog-readonly.token
+    projectIds: [12345]
 writes:
   enabled: false
   demoOnly: true

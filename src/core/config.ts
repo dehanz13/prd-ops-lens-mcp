@@ -64,6 +64,15 @@ export const ConfigSchema = z.strictObject({
         .refine((roles) => new Set(roles).size === roles.length, 'Role names must be unique'),
       analyzerArn: z.string().regex(/^arn:aws:access-analyzer:[a-z0-9-]+:\d{12}:analyzer\/[a-zA-Z0-9_.-]+$/).optional(),
     }).optional(),
+    posthog: z.strictObject({
+      enabled: z.boolean().default(false),
+      baseUrl,
+      tokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]*$/).optional(),
+      tokenFile: absolutePath.optional(),
+      projectIds: z.array(z.number().int().positive()).min(1).max(5)
+        .refine((ids) => new Set(ids).size === ids.length, 'Project ids must be unique'),
+    }).refine((value) => Number(Boolean(value.tokenEnv)) + Number(Boolean(value.tokenFile)) === 1,
+      'Choose exactly one tokenEnv or tokenFile').optional(),
   }).prefault({}),
   writes: z.strictObject({
     enabled: z.boolean().default(false),

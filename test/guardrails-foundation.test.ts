@@ -184,9 +184,11 @@ describe('credential strength preflight', () => {
 
   // @guardrail G1.3: PostHog scopes must be read-only and project-specific.
   it('rejects broad and write-capable PostHog scopes', () => {
-    expect(checkPostHogScopes(['project:123:read'], ['123'])).toEqual({});
-    expect(() => checkPostHogScopes(['project:123:read', 'project:123:write'], ['123'])).toThrow();
-    expect(() => checkPostHogScopes(['project:456:read'], ['123'])).toThrow();
+    const read = ['query:read', 'insight:read', 'error_tracking:read', 'feature_flag:read'];
+    expect(checkPostHogScopes(read, [123], [123])).toEqual({});
+    expect(() => checkPostHogScopes([...read, 'query:write'], [123], [123])).toThrow();
+    expect(() => checkPostHogScopes(read, [123], [456])).toThrow();
+    expect(() => checkPostHogScopes(read, [123], [123], ['org-id'])).toThrow();
   });
 
   // @guardrail G1.4: unverified or write-capable Hostinger scopes fail closed.

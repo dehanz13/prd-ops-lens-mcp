@@ -34,6 +34,9 @@ implemented, so each milestone can end with a green build.
 | G5.1 | Fixed IAM, STS, and Access Analyzer read actions | `test/iam.test.ts` |
 | G5.2 | Trust policy type-only summary | `test/iam.test.ts` |
 | G5.3 | Simulation decision and statement reference only | `test/iam.test.ts` |
+| G6.1 | Single SELECT, UTC window, row limit and timeout | `test/posthog.test.ts` |
+| G6.2 | Identity-safe projections; no recording or console route | `test/posthog.test.ts` |
+| G6.3 | Exact project allowlist and key scope binding | `test/posthog.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |
