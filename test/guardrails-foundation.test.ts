@@ -12,7 +12,7 @@ import { examined, ToolResultSchema } from '../src/core/result.js';
 import { ProviderLimiter, runTool, UNTRUSTED_DATA_NOTICE } from '../src/core/tool.js';
 
 const redactor = new Redactor({ identityKeys: ['sessionId'], identityLabels: ['room'],
-  identityValues: ['identity-private'], awsIdentifiers: true });
+  identityValues: ['identity-private'] });
 function audit(): { log: AuditLog; path: string } {
   const path = join(mkdtempSync(join(tmpdir(), 'ops-guardrail-')), 'audit.jsonl');
   return { log: new AuditLog(path, redactor), path };
