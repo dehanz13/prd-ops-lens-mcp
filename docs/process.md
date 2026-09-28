@@ -34,10 +34,12 @@ only in a sprint-end note.
 replaces Status, Priority, or Size options only before any cards exist; if an
 established Project has different options, it stops rather than clearing card
 values. It runs `gh label create --force` to update label colors and
-descriptions. It rewrites epic bodies to refresh story task lists. Existing
-card fields, including Status and Sprint, are left as the maintainer set them.
-The Milestone G migration renames the owner-created legacy epic and stories and
-replaces their bodies with the approved Grafana and public Kuma plan. Inspect
+descriptions. It appends missing epic story links while preserving checked
+tasks and manual notes. Existing card fields, including Status and Sprint, are
+left as the maintainer set them.
+The Milestone G migration renames the existing owner-created epic and three
+stories in place and replaces their bodies with the approved Grafana and public
+Kuma plan. It rejects a mix of old and new issue titles before writing. Inspect
 these changes before rerunning the seeder on an established project.
 
 The seeder selects an existing roadmap only when exactly one matching project

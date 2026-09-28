@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apiAll, assertOwnedIssue, assertSafeSelectFieldUpdates, ensureDefinitionOfDone,
-  ensureIssue, ensureProject, ensureProjectItem, ensureViews, indexManagedIssues,
+  ensureEpicStoryLinks, ensureIssue, ensureProject, ensureProjectItem, ensureViews, indexManagedIssues,
   initializeCard, selectLinkedProject,
   validateSprintField, validateViews } from '../scripts/seed-project.mjs';
 
@@ -39,6 +39,49 @@ test('Milestone G renames only owner-created legacy issues and updates their pla
   const stranger = new Map([[oldTitle, { ...issue, title: oldTitle, user: { login: 'stranger' } }]]);
   assert.throws(() => ensureIssue(stranger, newTitle, 'new goal', ['epic'], () => {}, () => {}),
     /unverified existing issue/);
+});
+
+test('Milestone G reuses the four existing public issue identities', () => {
+  const migrations = [
+    [28, 'Epic: host health and reachability through read-only signals',
+      'Epic: Host health through Grafana and public Kuma'],
+    [29, 'As a security reviewer, I can refuse owner-scoped host tokens so that no write-capable credential enters the MCP',
+      'As a security reviewer, I can verify Hostinger tokens are refused so that no owner-scoped credential enters the server'],
+    [30, 'As an on-call engineer, I can query host resource metrics through Grafana so that I can identify pressure',
+      'As an on-call engineer, I can read host metrics through Grafana so that I can identify resource pressure'],
+    [31, 'As an on-call engineer, I can distinguish an unpublished status page from a healthy host so that reachability is not guessed',
+      'As an on-call engineer, I can read public Kuma status JSON so that I can distinguish reachability from host pressure'],
+  ];
+  const existing = migrations.map(([number, title]) => ({ number, title, state: 'open',
+    user: { login: 'dehanz13' } }));
+  const issues = indexManagedIssues(existing);
+  const writes = [];
+  for (const [number, , nextTitle] of migrations) {
+    const migrated = ensureIssue(issues, nextTitle, 'approved goal', ['epic'],
+      () => { throw Error('duplicate issue created'); }, (...args) => { writes.push(args); });
+    assert.equal(migrated.number, number);
+    assert.equal(issues.get(nextTitle), migrated);
+  }
+  assert.equal(writes.length, 4);
+  const originalTitles = migrations.map(([number, title]) => ({ number, title, state: 'open',
+    user: { login: 'dehanz13' } }));
+  assert.throws(() => indexManagedIssues([...originalTitles, { number: 99,
+    title: migrations[0][2], state: 'open', user: { login: 'dehanz13' } }]),
+  /Ambiguous legacy issue migration/);
+});
+
+test('epic reruns retain checked tasks and manual notes while adding only missing links', () => {
+  const body = '## Stories\n\n- [x] #11 — completed story\n\nMaintainer note.\n\nSee the pinned Definition of Done issue before closing this epic.\n';
+  const done = { number: 11, title: 'completed story' };
+  const added = { number: 12, title: 'new story' };
+  assert.equal(ensureEpicStoryLinks(body, [done]), body);
+  const next = ensureEpicStoryLinks(body, [done, added]);
+  assert.match(next, /- \[x\] #11 — completed story/);
+  assert.match(next, /Maintainer note/);
+  assert.match(next, /- \[ \] #12 — new story/);
+  assert.equal(ensureEpicStoryLinks(next, [done, added]), next);
+  assert.match(ensureEpicStoryLinks('## Stories\n\nStories will be linked as they are created.',
+    [added]), /- \[ \] #12 — new story/);
 });
 
 test('GitHub lookups flatten every page and reject malformed pagination', () => {

@@ -18,13 +18,22 @@ const labels = {
   'good-first-issue': ['a2eeef', 'Suitable entry point for a new contributor'],
 };
 const legacyTitles = new Map([
-  ['Epic: Host health through Grafana and public Kuma', 'Epic: VPS status with optional SSH reads'],
-  ['As a security reviewer, I can verify Hostinger tokens are refused so that no owner-scoped credential enters the server',
-    'As an on-call engineer, I can inspect VPS state and resource use so that I can identify host pressure'],
-  ['As an on-call engineer, I can read host metrics through Grafana so that I can identify resource pressure',
-    'As an on-call engineer, I can inspect recent provider actions so that I can correlate maintenance with an incident'],
-  ['As an on-call engineer, I can read public Kuma status JSON so that I can distinguish reachability from host pressure',
-    'As a security reviewer, I can opt into fixed SSH diagnostics so that host reads never accept arbitrary shell input'],
+  ['Epic: Host health through Grafana and public Kuma', [
+    'Epic: host health and reachability through read-only signals',
+    'Epic: VPS status with optional SSH reads',
+  ]],
+  ['As a security reviewer, I can verify Hostinger tokens are refused so that no owner-scoped credential enters the server', [
+    'As a security reviewer, I can refuse owner-scoped host tokens so that no write-capable credential enters the MCP',
+    'As an on-call engineer, I can inspect VPS state and resource use so that I can identify host pressure',
+  ]],
+  ['As an on-call engineer, I can read host metrics through Grafana so that I can identify resource pressure', [
+    'As an on-call engineer, I can query host resource metrics through Grafana so that I can identify pressure',
+    'As an on-call engineer, I can inspect recent provider actions so that I can correlate maintenance with an incident',
+  ]],
+  ['As an on-call engineer, I can read public Kuma status JSON so that I can distinguish reachability from host pressure', [
+    'As an on-call engineer, I can distinguish an unpublished status page from a healthy host so that reachability is not guessed',
+    'As a security reviewer, I can opt into fixed SSH diagnostics so that host reads never accept arbitrary shell input',
+  ]],
 ]);
 const provingTests = {
   A: [
@@ -315,10 +324,27 @@ function epicBody(milestone, stories = []) {
   return `## Goal\n\n${milestone.goal}\n\n## Guardrails\n\n${milestone.guardrails.join(', ')}. Each story lists its exact IDs and proving tests.\n\n## Stories\n\n${stories.map((issue) => `- [ ] #${issue.number} — ${issue.title}`).join('\n') || 'Stories will be linked as they are created.'}\n\nSee the pinned Definition of Done issue before closing this epic.\n`;
 }
 
+export function ensureEpicStoryLinks(body, children) {
+  const missing = children.filter((issue) => !new RegExp(
+    `^- \\[\\s*[xX ]\\s*\\] #${issue.number}(?:\\s|$)`, 'm').test(body ?? ''));
+  if (missing.length === 0) return body;
+  const links = missing.map((issue) => `- [ ] #${issue.number} — ${issue.title}`).join('\n');
+  if (body?.includes('Stories will be linked as they are created.')) {
+    return body.replace('Stories will be linked as they are created.', links);
+  }
+  const footer = 'See the pinned Definition of Done issue before closing this epic.';
+  if (body?.includes(footer)) return body.replace(footer, `${links}\n\n${footer}`);
+  return `${(body ?? '').trimEnd()}\n\n## Stories\n\n${links}\n`;
+}
+
 export function ensureIssue(issues, title, body, issueLabels, create = api, update = api) {
+  const oldTitles = (legacyTitles.get(title) ?? []).filter((candidate) => issues.has(candidate));
+  if (oldTitles.length > 1 || (oldTitles.length && issues.has(title))) {
+    throw new Error(`Ambiguous legacy issue migration: ${title}`);
+  }
   if (issues.has(title)) return assertOwnedIssue(issues.get(title), title);
-  const previousTitle = legacyTitles.get(title);
-  if (previousTitle && issues.has(previousTitle)) {
+  const previousTitle = oldTitles[0];
+  if (previousTitle) {
     const issue = assertOwnedIssue(issues.get(previousTitle), previousTitle);
     update('PATCH', `repos/${repo}/issues/${issue.number}`, { title, body });
     issues.delete(previousTitle);
@@ -334,7 +360,7 @@ export function ensureIssue(issues, title, body, issueLabels, create = api, upda
 }
 
 export function indexManagedIssues(existing) {
-  const managedTitles = new Set(['Definition of Done', ...legacyTitles.values()]);
+  const managedTitles = new Set(['Definition of Done', ...[...legacyTitles.values()].flat()]);
   for (const milestone of plan.milestones) {
     managedTitles.add(`Epic: ${milestone.name}`);
     for (const story of milestone.stories) managedTitles.add(story.title);
@@ -346,6 +372,11 @@ export function indexManagedIssues(existing) {
     issues.set(issue.title, issue);
   }
   for (const [title, issue] of issues) assertOwnedIssue(issue, title);
+  for (const [title, oldTitles] of legacyTitles) {
+    if ([title, ...oldTitles].filter((candidate) => issues.has(candidate)).length > 1) {
+      throw new Error(`Ambiguous legacy issue migration: ${title}`);
+    }
+  }
   const dod = issues.get('Definition of Done');
   if (dod && dod.state !== 'open') {
     throw new Error('Definition of Done is closed or its state is unknown; reopen it before seeding');
@@ -470,8 +501,9 @@ function main() {
       setIssueMilestone(issue, milestone.id, milestones);
       children.push(issue);
     }
-    if (children.some((issue) => !epic.body?.includes(`- [ ] #${issue.number}`))) {
-      epic.body = epicBody(milestone, children);
+    const linkedBody = ensureEpicStoryLinks(epic.body, children);
+    if (linkedBody !== epic.body) {
+      epic.body = linkedBody;
       api('PATCH', `repos/${repo}/issues/${epic.number}`, { body: epic.body });
     }
     process.stdout.write(`Milestone ${milestone.id}: ${children.length} linked stories\n`);
