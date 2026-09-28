@@ -22,7 +22,7 @@ Sprint 1 targets the foundation and local synthetic demo stack. Sprint 2
 targets the remaining Grafana work and public uptime status. Later milestones
 enter the sprint only when their credentials and guardrail work are Ready.
 
-## Local verification while hosted CI is unavailable
+## Local and hosted verification
 
 For each new PR head, run the owner-only installed controller described in
 `CONTRIBUTING.md` with the full commit SHA. The controller creates a fresh
@@ -34,6 +34,5 @@ measured counts and the Node version. An unavailable gate gets `error`, never
 `success`; the GitHub PR dependency-review action remains unavailable locally.
 
 These statuses record self-run evidence. They do not replace the repository's
-GitHub Actions checks. Once Actions can start jobs again, rerun CI at every
-open PR head and require green hosted checks on the release commit before
-merging or tagging it.
+GitHub Actions checks. Rerun hosted CI at every open PR head and require green
+hosted checks on the release commit before merging or tagging it.

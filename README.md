@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, local incident correlation, local agent usage reports, and a Docker Desktop demo restart are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Hosted CI remains blocked by account billing.
+**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, local incident correlation, local agent usage reports, and a Docker Desktop demo restart are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions.
 
 ## The examined principle
 
@@ -108,12 +108,12 @@ npm run secret-scan
 npm run smoke:demo
 ```
 
-The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 positive controls** in the local run on 2026-09-27. It replays ten handmade fault worlds through the MCP timeline tool and removes each case's key observation to check that scoring fails. This is an evidence availability score; model root-cause identification was not run. The fixture linter checked 12 synthetic files with zero violations locally, including the private denylist. CI can run its public pattern checks without a private file; the local exact-SHA gate requires the private check. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior.
+The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 positive controls** in the local run on 2026-09-28. It replays ten handmade fault worlds through the MCP timeline tool and removes each case's key observation to check that scoring fails. This is an evidence availability score; model root-cause identification was not run. The fixture linter found zero violations in the synthetic fixtures and private denylist during local verification. CI runs its public pattern checks without the private file; the local exact-SHA gate requires the private check. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior; inspect hosted checks on the exact PR head separately.
 
 ## Roadmap
 
 1. Validate CloudWatch and IAM against supplied, independently reviewed read-only profiles.
 2. Validate PostHog with a project-scoped read-only key; verify host and container exporters after an operator deploys them.
-3. Prepare a release after hosted CI recovers. Optional usage exports require separately scoped credentials and privacy checks.
+3. Prepare a release only after hosted checks pass on the release commit. Optional usage exports require separately scoped credentials and privacy checks.
 
 See [SECURITY.md](SECURITY.md) and the [threat model](docs/threat-model.md) for reporting and trust boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) for the local check sequence.
