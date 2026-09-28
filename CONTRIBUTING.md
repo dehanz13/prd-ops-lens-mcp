@@ -1,6 +1,6 @@
 # Contributing
 
-Use Node 22 or newer. Create feature, hotfix, and chore branches from `develop`; open PRs back into `develop`. Keep `main` for production-ready releases. Keep tests and examples synthetic. Before opening a pull request, run `npm run check`, `npm run build`, `npm audit --omit=dev`, `npm run secret-scan`, and the relevant local demo smoke test.
+Use Node 22.13+ (Node 22 recommended; Node 24 or 26+ also supported). Create feature, hotfix, and chore branches from `develop`; open PRs back into `develop`. Keep `main` for production-ready releases. Keep tests and examples synthetic. Before opening a pull request, run `npm run check`, `npm run build`, `npm audit --omit=dev`, `npm run secret-scan`, and the relevant local demo smoke test.
 
 Set `git config core.hooksPath .githooks` in this clone. The pre-commit hook scans staged changes. The pre-push hook requires an owner-only, nonempty private denylist at `~/.config/prd-ops-lens-mcp/denylist.txt` and checks the proposed push diff without displaying private terms. The repository contains an empty `denylist.example.txt` only.
 

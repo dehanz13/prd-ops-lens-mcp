@@ -45,7 +45,7 @@ flowchart LR
 
 ## Install locally
 
-**Prerequisites:** A macOS or Linux computer (or Windows with WSL2), Node.js 22+ with npm, and Git. Plan for 4 GB RAM and 1 GB free disk for the local build; no GPU or cloud account is needed. Docker with Compose is optional for the synthetic demo. To use the server, your agent must support local stdio MCP servers.
+**Prerequisites:** A macOS or Linux computer (or Windows with WSL2), Node.js 22.13+ (Node 22 recommended; Node 24 or 26+ also supported) with npm, and Git. Plan for 4 GB RAM and 1 GB free disk for the local build; no GPU or cloud account is needed. Docker with Compose is optional for the synthetic demo. To use the server, your agent must support local stdio MCP servers.
 
 1. **Clone and build.**
 
