@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import process from 'node:process';
 import test from 'node:test';
 import { apiAll, assertOwnedIssue, assertSafeSelectFieldUpdates, ensureDefinitionOfDone,
   ensureEpicStoryLinks, ensureIssue, ensureProject, ensureProjectItem, ensureViews, indexManagedIssues,
   initializeCard, selectLinkedProject,
   validateProvingReferences, validateSprintField, validateViews } from '../scripts/seed-project.mjs';
+
+test('Sprint 1 plan includes the existing exact-SHA gate story and 34 planned points', () => {
+  const output = execFileSync(process.execPath, ['scripts/seed-project.mjs', '--plan'],
+    { encoding: 'utf8' });
+  assert.match(output, /38 stories; Sprint 1 planned 34 points; Sprint 2 planned 21 points/);
+});
 
 test('roadmap seeding refuses a lookalike issue from another account', () => {
   const title = 'Epic: synthetic milestone';

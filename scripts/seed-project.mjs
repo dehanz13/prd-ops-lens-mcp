@@ -42,6 +42,7 @@ const provingTests = {
     ['test/core.test.ts', 'test/guardrails-foundation.test.ts'],
     ['test/repository-guardrails.test.ts', 'test/private-denylist.test.ts'],
     ['scripts/seed-project.mjs --plan', 'test/repository-guardrails.test.ts'],
+    ['scripts/local-gates.sh', 'test/local-gates.test.ts'],
   ],
   B: [
     ['scripts/smoke-demo.mjs', 'test/grafana.test.ts'],
