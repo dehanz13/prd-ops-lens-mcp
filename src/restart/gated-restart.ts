@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { statSync } from 'node:fs';
+import { lstatSync } from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { auditedInput } from '../core/audited-input.js';
@@ -16,7 +16,7 @@ const confirmInput = z.strictObject({ container: z.literal('demo-api'),
 type Pending = { container: 'demo-api'; hostId: string; targetId: string; nonce: string; expiresAt: number };
 
 function present(path: string): boolean {
-  try { statSync(path); return true; }
+  try { lstatSync(path); return true; }
   catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return false;
     throw new OpsError('REFUSED', 'Demo lock state could not be verified');
