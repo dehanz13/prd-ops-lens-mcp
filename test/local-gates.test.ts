@@ -9,6 +9,12 @@ it('refuses the PR checkout as a status-posting runner', () => {
   const script = readFileSync('scripts/local-gates.sh', 'utf8');
   expect(script).toContain('--network "$network"');
   expect(script).toContain('--cap-drop ALL');
+  expect(script).toContain('-v "$checkout:/work:ro"');
+  expect(script).toContain('$scratch/dependencies:/work/node_modules:ro');
+  expect(script).toContain('$scratch/dependencies:/work/node_modules:rw');
+  expect(script).toContain('mktemp -d "$scratch/outputs.XXXXXX"');
+  expect(script).toContain('$outputs/vite-temp:/work/node_modules/.vite-temp:rw');
+  expect(script).not.toContain('-v "$scratch:/results"');
   expect(script).toContain('-e HOME=/tmp');
   expect(script).not.toContain('-v "$HOME');
   expect(script).not.toContain('/var/run/docker.sock');

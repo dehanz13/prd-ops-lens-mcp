@@ -3,7 +3,7 @@ import test from 'node:test';
 import { apiAll, assertOwnedIssue, assertSafeSelectFieldUpdates, ensureDefinitionOfDone,
   ensureEpicStoryLinks, ensureIssue, ensureProject, ensureProjectItem, ensureViews, indexManagedIssues,
   initializeCard, selectLinkedProject,
-  validateSprintField, validateViews } from '../scripts/seed-project.mjs';
+  validateProvingReferences, validateSprintField, validateViews } from '../scripts/seed-project.mjs';
 
 test('roadmap seeding refuses a lookalike issue from another account', () => {
   const title = 'Epic: synthetic milestone';
@@ -192,4 +192,10 @@ test('Sprint and views must be configured before issue seeding', () => {
   assert.throws(() => ensureViews(project, () => ({ views: { nodes: [
     { ...views[0], verticalGroupByFields: { nodes: [] } }, ...views.slice(1),
   ] } }), () => { throw Error('existing views should not be created'); }), /Board view by Status/);
+});
+
+test('roadmap refuses a proving reference to a missing test', () => {
+  validateProvingReferences(['test/resources-prompts.test.ts']);
+  assert.throws(() => validateProvingReferences(['test/resources.test.ts']),
+    /Missing proving test or script/);
 });

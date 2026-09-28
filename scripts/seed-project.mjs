@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -52,7 +52,7 @@ const provingTests = {
   E: [['test/iam.test.ts'], ['test/iam.test.ts'], ['test/iam.test.ts']],
   F: [['test/posthog.test.ts'], ['test/posthog.test.ts'], ['test/posthog.test.ts']],
   G: [['test/host-health.test.ts'], ['test/host-health.test.ts'], ['test/uptime.test.ts']],
-  H: [['test/timeline.test.ts'], ['test/resources.test.ts'], ['test/prompts.test.ts']],
+  H: [['test/timeline.test.ts'], ['test/resources-prompts.test.ts'], ['test/resources-prompts.test.ts']],
   I: [['test/evals.test.ts'], ['test/evals.test.ts'], ['test/evals.test.ts']],
   J: [['test/restart.test.ts'], ['test/restart.test.ts'], ['test/repository-guardrails.test.ts'], ['test/repository-guardrails.test.ts']],
   K: [['test/agent-usage.test.ts'], ['test/agent-usage.test.ts'], ['test/agent-usage.test.ts']],
@@ -92,7 +92,17 @@ export function apiAll(path, run = gh) {
   return pages.flat();
 }
 
+export function validateProvingReferences(references, exists = existsSync) {
+  for (const reference of references) {
+    const source = reference.trim().split(/\s+/)[0];
+    if (!source || !exists(new URL(`../${source}`, import.meta.url))) {
+      throw new Error(`Missing proving test or script: ${source}`);
+    }
+  }
+}
+
 function validate() {
+  validateProvingReferences(Object.values(provingTests).flat(2));
   const expected = 'ABCDEFGHIJK'.split('');
   if (plan.title !== 'prd-ops-lens-mcp roadmap' || plan.sprintLengthDays !== 7) {
     throw new Error('Unexpected project name or sprint length');
