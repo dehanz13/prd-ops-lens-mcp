@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
+import { resolve } from 'node:path';
 
 const owner = 'dehanz13';
 const repo = `${owner}/prd-ops-lens-mcp`;
@@ -224,11 +225,18 @@ function epicBody(milestone, stories = []) {
 }
 
 function ensureIssue(issues, title, body, issueLabels) {
-  if (issues.has(title)) return issues.get(title);
+  if (issues.has(title)) return assertOwnedIssue(issues.get(title), title);
   const created = api('POST', `repos/${repo}/issues`, { title, body, labels: issueLabels });
   const issue = { number: created.number, title, url: created.html_url, body, milestone: null };
   if (!issue.number || !issue.url) throw new Error(`Issue creation returned no issue URL for ${title}`);
   issues.set(title, issue);
+  return issue;
+}
+
+export function assertOwnedIssue(issue, title) {
+  if (!issue || issue.title !== title || issue.user?.login !== owner || issue.pull_request) {
+    throw new Error(`Refusing to adopt an unverified existing issue: ${title}`);
+  }
   return issue;
 }
 
@@ -333,4 +341,4 @@ function main() {
     : `Project seeded: https://github.com/users/${owner}/projects/${number}\n`);
 }
 
-main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();
