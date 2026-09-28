@@ -125,10 +125,15 @@ export class UptimeProvider implements ProviderModule {
     }));
     const limit = ctx.config.limits.maxRows;
     const incidents = page.data.incidents.slice(0, limit).map((item) => {
-      const parsed = z.object({ title: z.string().optional(), status: z.string().optional() })
+      const parsed = z.object({ title: z.string().optional(), status: z.string().optional(),
+        createdDate: z.string().optional(), lastUpdatedDate: z.string().optional() })
         .passthrough().safeParse(item);
       return { title: parsed.success ? safeLabel(parsed.data.title ?? 'Untitled incident') : 'Untitled incident',
-        status: parsed.success ? safeLabel(parsed.data.status ?? 'unknown') : 'unknown' };
+        status: parsed.success ? safeLabel(parsed.data.status ?? 'unknown') : 'unknown',
+        createdAt: parsed.success && parsed.data.createdDate
+          ? unambiguousTime(parsed.data.createdDate) : null,
+        updatedAt: parsed.success && parsed.data.lastUpdatedDate
+          ? unambiguousTime(parsed.data.lastUpdatedDate) : null };
     });
     const trimmed = monitors.slice(0, limit);
     const truncated = monitors.length > limit || page.data.incidents.length > limit;
