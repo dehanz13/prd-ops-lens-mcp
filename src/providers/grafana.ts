@@ -108,7 +108,6 @@ function grafanaRoutes(grafana: GrafanaConfig) {
 export class GrafanaProvider implements ProviderModule {
   readonly id = 'grafana';
   private client?: BoundedHttpClient;
-  private warning: string | undefined;
 
   async preflight(config: Config, env: NodeJS.ProcessEnv = process.env): Promise<void> {
     const grafana = config.providers.grafana;
@@ -118,8 +117,7 @@ export class GrafanaProvider implements ProviderModule {
     const client = new BoundedHttpClient(grafana.baseUrl, token, config.limits.timeoutMs,
       config.limits.maxResponseBytes, 'Grafana', grafanaRoutes(grafana));
     const { body } = await client.get('/api/access-control/user/permissions');
-    this.warning = checkGrafanaPermissions(body as Record<string, unknown>,
-      env.OPS_LENS_ALLOW_POWERFUL_GRAFANA === '1').warning;
+    checkGrafanaPermissions(body as Record<string, unknown>);
     this.client = client;
   }
 
@@ -127,7 +125,6 @@ export class GrafanaProvider implements ProviderModule {
     const grafana = context.config.providers.grafana;
     if (!grafana?.enabled) return;
     if (!this.client) throw new OpsError('REFUSED', 'Grafana credential preflight was not completed');
-    if (this.warning) context.runtime.providerWarnings?.set('grafana', this.warning);
     const ctx: GrafanaContext = { ...context, client: this.client, grafana };
 
     server.registerTool('grafana_search_dashboards', {
