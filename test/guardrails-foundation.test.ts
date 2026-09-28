@@ -170,6 +170,10 @@ describe('credential strength preflight', () => {
     expect(() => checkGrafanaPermissions(permissions)).toThrow('write permissions');
     expect(() => (checkGrafanaPermissions as (...args: unknown[]) => unknown)(permissions, true))
       .toThrow('write permissions');
+    expect(() => checkGrafanaPermissions({ 'plugins:install': ['*'] }))
+      .toThrow('write permissions');
+    expect(() => checkGrafanaPermissions({ '*': ['*'] })).toThrow('write permissions');
+    expect(checkGrafanaPermissions({ 'dashboards:read': ['*'], 'datasources:query': ['*'], 'folders:list': ['*'] })).toEqual({});
     expect(checkGrafanaPermissions({ 'dashboards:read': ['*'] })).toEqual({});
     expect(() => checkGrafanaPermissions({})).toThrow('could not be verified');
   });
