@@ -80,6 +80,11 @@ summary_for() {
       const value = JSON.parse(log);
       if (!Array.isArray(value.components)) process.exit(1);
       process.stdout.write(`${value.components.length} SBOM components`);
+    } else if (name === "fixtures") {
+      const value = JSON.parse(log.trim().split("\n").at(-1));
+      if (!Number.isInteger(value.files) || !Number.isInteger(value.violations) ||
+        value.privateCheck !== "run") process.exit(1);
+      process.stdout.write(`${value.files} files; ${value.violations} violations; private scan run`);
     } else if (name === "gitleaks") {
       process.stdout.write("0 detected secrets");
     } else if (name === "audit") {
@@ -130,6 +135,7 @@ gate lint npm run lint
 gate typecheck npm run typecheck
 gate tests npm test
 gate evals npm run evals
+gate fixtures npm run fixtures:lint -- --require-private
 gate guardrails npm run guardrails
 gate build npm run build
 gate audit npm audit --omit=dev

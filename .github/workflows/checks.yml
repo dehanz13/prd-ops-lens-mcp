@@ -20,6 +20,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run evals
+      - run: npm run fixtures:lint
       - run: npm run guardrails
       - run: npm run build
       - run: npm audit --omit=dev

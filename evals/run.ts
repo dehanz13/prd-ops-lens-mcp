@@ -1,30 +1,55 @@
-import { ToolResultSchema } from '../src/core/result.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ConfigSchema } from '../src/core/config.js';
+import { examined } from '../src/core/result.js';
+import { createServer } from '../src/server.js';
+import { evidenceScore, suiteSchema, type Scenario } from './scoring.js';
 
-// Foundation replay: a zero-row answer still needs a provider, query, and window.
-const answer = {
-  data: { errors: 0 },
-  examined: {
-    provider: 'synthetic',
-    query: 'errors for service-a',
-    window: { from: '2026-01-01T00:00:00.000Z', to: '2026-01-01T01:00:00.000Z' },
-    rowCount: 0,
-    scannedCount: 0,
-    byteCount: 0,
-    lineCount: 0,
-    truncated: false,
-    warnings: [],
-  },
-};
+const suite = suiteSchema.parse(JSON.parse(readFileSync('evals/fixtures/scenarios.json', 'utf8')));
+const directory = mkdtempSync(join(tmpdir(), 'ops-lens-evals-'));
+const server = createServer(ConfigSchema.parse({ version: 1,
+  audit: { path: join(directory, 'audit.jsonl') } }));
+const client = new Client({ name: 'incident-replay', version: '1.0.0' });
+const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+const window = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-01T01:00:00.000Z' };
 
-function citesEvidence(value: unknown): boolean {
-  const parsed = ToolResultSchema.safeParse(value);
-  return parsed.success && parsed.data.examined.window !== null &&
-    parsed.data.examined.query.length > 0;
+function sourcesFor(scenario: Scenario, removeKey: boolean) {
+  return scenario.sources.map((source, index) => {
+    const data = removeKey && index === scenario.keySource
+      ? Array.isArray(source.data) ? [] : { state: 'unknown', monitors: [], incidents: [] }
+      : source.data;
+    const rowCount = Array.isArray(data) ? data.length :
+      typeof data === 'object' && data !== null && 'monitors' in data && Array.isArray(data.monitors)
+        ? data.monitors.length : 0;
+    return { tool: source.tool, result: { data, examined: examined(source.provider,
+      source.query, { window, rowCount }) } };
+  });
 }
 
-const positive = citesEvidence(answer);
-const removedEvidence = { ...answer, examined: { ...answer.examined, query: '' } };
-const negativeControl = !citesEvidence(removedEvidence);
-const report = { suite: 'foundation-replay', scenarios: 1, evidencePassed: Number(positive), positiveControlsPassed: Number(negativeControl) };
+let evidencePassed = 0;
+let positiveControlsPassed = 0;
+await server.connect(serverTransport);
+await client.connect(clientTransport);
+try {
+  for (const scenario of suite.cases) {
+    const result = await client.callTool({ name: 'incident_timeline', arguments: {
+      sources: sourcesFor(scenario, false), expectedTools: scenario.sources.map((source) => source.tool),
+    } });
+    if (!result.isError && evidenceScore(result.structuredContent, scenario)) evidencePassed += 1;
+    const removed = await client.callTool({ name: 'incident_timeline', arguments: {
+      sources: sourcesFor(scenario, true), expectedTools: scenario.sources.map((source) => source.tool),
+    } });
+    if (!evidenceScore(removed.structuredContent, scenario)) positiveControlsPassed += 1;
+  }
+} finally {
+  await client.close();
+  await server.close();
+  rmSync(directory, { recursive: true, force: true });
+}
+
+const report = { suite: 'incident-replay-v1', scenarios: suite.cases.length,
+  evidencePassed, positiveControlsPassed, modelScored: false };
 process.stdout.write(`${JSON.stringify(report)}\n`);
-if (!positive || !negativeControl) process.exitCode = 1;
+if (evidencePassed !== suite.cases.length || positiveControlsPassed !== suite.cases.length) process.exitCode = 1;

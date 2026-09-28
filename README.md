@@ -95,6 +95,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run evals
+npm run fixtures:lint
 npm run guardrails
 npm run build
 npm audit --omit=dev
@@ -102,7 +103,7 @@ npm run secret-scan
 npm run smoke:demo
 ```
 
-The foundation replay has **1/1 evidence check** and **1/1 positive control** in the latest local run. It tests that a zero-row answer cites its query and window, and fails when the query evidence is removed. The planned incident suite will add 8–12 synthetic fault worlds and report its own scores when implemented. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior.
+The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 positive controls** in the local run on 2026-09-27. It replays ten handmade fault worlds through the MCP timeline tool and removes each case's key observation to check that scoring fails. This is an evidence availability score; model root-cause identification was not run. The fixture linter checked 12 synthetic files with zero violations locally, including the private denylist. CI can run its public pattern checks without a private file; the local exact-SHA gate requires the private check. Unit tests enforce at least 90% line coverage on `src/` (excluding the process entrypoint). The [guardrail map](GUARDRAILS.md) links each active ID to a tagged test. Local results do not establish GitHub CI or live provider behavior.
 
 ## Roadmap
 

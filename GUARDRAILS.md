@@ -43,6 +43,8 @@ implemented, so each milestone can end with a green build.
 | G8.1 | Cited client-supplied evidence, ordered events, unknown missing sources | `test/timeline.test.ts` |
 | G8.2 | Explicit owner-only resources confined to configured directory | `test/resources-prompts.test.ts` |
 | G8.3 | Prompts preserve untrusted-data and read-only guidance | `test/resources-prompts.test.ts` |
+| G10.1 | Synthetic fixture policy rejects identities, non-doc addresses, and credential-like data | `test/evals.test.ts` |
+| G10.2 | Each replay has a missing-evidence positive control | `test/evals.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |
