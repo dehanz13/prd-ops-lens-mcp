@@ -8,7 +8,7 @@ note in `docs/sprints/sprint-N.md`.
 
 The board tracks Backlog, Ready, In progress, In review, and Done. A story moves
 to In review when its PR opens. It reaches Done only after its acceptance
-checklist and the [Definition of Done](../CONTRIBUTING.md) are satisfied and
+checklist and the [pinned Definition of Done issue](https://github.com/dehanz13/prd-ops-lens-mcp/issues/1) are satisfied and
 the PR is reviewed and merged into `develop`. `main` is reserved for
 production-ready releases.
 
@@ -31,9 +31,20 @@ Done issue. Review the Project after seeding and record actual completed points
 only in a sprint-end note.
 
 `--apply` also writes to existing resources. It makes the Project public,
-replaces Status, Priority, or Size options when they differ (which can clear
-existing card values), and runs `gh label create --force` to update label
-colors and descriptions. It rewrites epic bodies to refresh story task lists.
+replaces Status, Priority, or Size options only before any cards exist; if an
+established Project has different options, it stops rather than clearing card
+values. It runs `gh label create --force` to update label colors and
+descriptions. It rewrites epic bodies to refresh story task lists. Existing
+card fields, including Status and Sprint, are left as the maintainer set them.
 The Milestone G migration renames the owner-created legacy epic and stories and
 replaces their bodies with the approved Grafana and public Kuma plan. Inspect
 these changes before rerunning the seeder on an established project.
+
+The seeder selects an existing roadmap only when exactly one matching project
+is linked to this repository. Duplicate managed issue titles, a closed
+Definition of Done issue, missing Sprint 1 or Sprint 2 iterations, and view
+layout or grouping drift stop issue seeding. GitHub's Project API can create
+the Board, Sprint, and Roadmap views but cannot set their grouping. For a new
+Project, group Board by Status, Sprint by Sprint, and Roadmap by Milestone in
+the UI, then rerun `--apply`. Existing card fields are preserved on reruns;
+reconcile a partially configured card manually.

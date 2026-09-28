@@ -1,0 +1,46 @@
+name: Story
+description: A user outcome with testable acceptance criteria
+title: 'As a user, I can ... so that ...'
+labels: ['story']
+body:
+  - type: markdown
+    attributes:
+      value: 'Use synthetic examples. Do not include credentials, private hosts, account data, or identifying logs.'
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome and why it matters
+      description: Complete the user-story title and explain the operational need.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ] Bounded behavior is implemented and documented.
+        - [ ] Guardrail IDs and proving tests are listed here.
+        - [ ] Local verification evidence is attached to the PR.
+    validations:
+      required: true
+  - type: input
+    id: epic
+    attributes:
+      label: Milestone epic
+      placeholder: '#issue-number'
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: ['P0', 'P1', 'P2']
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size (points)
+      options: ['1', '2', '3', '5', '8']
+    validations:
+      required: true

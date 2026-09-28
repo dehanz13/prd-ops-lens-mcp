@@ -130,39 +130,73 @@ function sprintStartDates() {
   return [date(0), date(7)];
 }
 
-function projectState(number) {
+export function projectState(number) {
   const data = graphql(`query { user(login:${JSON.stringify(owner)}) { projectV2(number:${number}) {
-    id number title fields(first:100) { nodes {
+    id number title repositories(first:100) { nodes { nameWithOwner } pageInfo { hasNextPage } }
+    items { totalCount } fields(first:100) { pageInfo { hasNextPage } nodes {
       ... on ProjectV2Field { id name databaseId }
       ... on ProjectV2SingleSelectField { id name databaseId options { id name } }
       ... on ProjectV2IterationField { id name databaseId configuration { iterations { id title startDate duration } } }
-    } } views(first:30) { nodes { id name layout } }
+    } } views(first:100) { pageInfo { hasNextPage } nodes { id name layout
+      groupByFields(first:10) { nodes {
+        ... on ProjectV2Field { name }
+        ... on ProjectV2SingleSelectField { name }
+        ... on ProjectV2IterationField { name }
+      } }
+      verticalGroupByFields(first:10) { nodes {
+        ... on ProjectV2Field { name }
+        ... on ProjectV2SingleSelectField { name }
+        ... on ProjectV2IterationField { name }
+      } }
+    } }
   } } }`);
   if (!data.user?.projectV2) throw new Error('Project lookup failed');
   return data.user.projectV2;
 }
 
-function ensureProject() {
-  const projects = json(['project', 'list', '--owner', owner, '--limit', '100', '--format', 'json']);
-  const found = projects.projects?.find((item) => item.title === plan.title);
-  const project = found ?? json(['project', 'create', '--owner', owner, '--title', plan.title, '--format', 'json']);
+export function selectLinkedProject(projects, inspect = projectState) {
+  if (!Array.isArray(projects)) throw new Error('Project list was invalid');
+  const matches = projects.filter((item) => item.title === plan.title);
+  if (matches.length === 0) return null;
+  const linked = matches.filter((item) => {
+    if (!Number.isInteger(item.number)) throw new Error('Project number was invalid');
+    const state = inspect(item.number);
+    if (state.repositories?.pageInfo?.hasNextPage !== false ||
+      !Array.isArray(state.repositories?.nodes)) {
+      throw new Error('Project repository links could not be verified');
+    }
+    return state.repositories.nodes.some((linkedRepo) => linkedRepo.nameWithOwner === repo);
+  });
+  if (linked.length !== 1) throw new Error('Roadmap project title is ambiguous or not linked to this repository');
+  return linked[0];
+}
+
+export function ensureProject(runJson = json, runGh = gh, inspect = projectState) {
+  const projects = runJson(['project', 'list', '--owner', owner, '--limit', '1000', '--format', 'json']);
+  if (projects.projects?.length === 1000) throw new Error('Project list may be incomplete; refusing title lookup');
+  const found = selectLinkedProject(projects.projects, inspect);
+  const project = found ?? runJson(['project', 'create', '--owner', owner, '--title', plan.title, '--format', 'json']);
   const number = project.number;
   if (!Number.isInteger(number)) throw new Error('GitHub did not return a project number');
-  gh(['project', 'link', String(number), '--owner', owner, '--repo', repo]);
+  runGh(['project', 'link', String(number), '--owner', owner, '--repo', repo]);
   const readme = `# Sprint goals\n\nSprint 1: ${plan.sprintGoals['1']}\n\nSprint 2: ${plan.sprintGoals['2']}\n\nOne-week iterations. A story is Done only after its checklist, tests, review, and merge into develop. See docs/process.md and the pinned Definition of Done issue. Planned points are not completed velocity.`;
-  gh(['project', 'edit', String(number), '--owner', owner, '--visibility', 'PUBLIC', '--description', 'A public, evidence-based delivery board for the MCP server.', '--readme', readme]);
+  runGh(['project', 'edit', String(number), '--owner', owner, '--visibility', 'PUBLIC', '--description', 'A public, evidence-based delivery board for the MCP server.', '--readme', readme]);
   return number;
 }
 
 function ensureFields(number) {
   let project = projectState(number);
+  if (project.fields.pageInfo?.hasNextPage) throw new Error('Project field lookup was incomplete');
+  if (!Number.isInteger(project.items?.totalCount)) throw new Error('Project card count was unavailable');
   const get = (name) => project.fields.nodes.find((field) => field.name === name);
   if (!get('Status')) throw new Error('GitHub did not create its standard Status field');
-  for (const [name, options] of [
+  const selectFields = [
     ['Status', ['Backlog', 'Ready', 'In progress', 'In review', 'Done']],
     ['Priority', ['P0', 'P1', 'P2']],
     ['Size', ['1', '2', '3', '5', '8']],
-  ]) {
+  ];
+  assertSafeSelectFieldUpdates(project, selectFields);
+  for (const [name, options] of selectFields) {
     if (!get(name)) {
       gh(['project', 'field-create', String(number), '--owner', owner, '--name', name,
         '--data-type', 'SINGLE_SELECT', '--single-select-options', options.join(',')]);
@@ -184,10 +218,46 @@ function ensureFields(number) {
   project = projectState(number);
   const fieldNames = ['Status', 'Priority', 'Size', 'Sprint', 'Milestone'];
   for (const name of fieldNames) if (!project.fields.nodes.some((field) => field.name === name)) throw new Error(`Missing ${name} field`);
+  validateSprintField(project.fields.nodes.find((field) => field.name === 'Sprint'));
   return project;
 }
 
-function ensureViews(project) {
+export function assertSafeSelectFieldUpdates(project, selectFields) {
+  for (const [name, options] of selectFields) {
+    const field = project.fields.nodes.find((candidate) => candidate.name === name);
+    if (field?.options && field.options.map((option) => option.name).join('|') !== options.join('|') &&
+      project.items?.totalCount > 0) {
+      throw new Error(`Refusing to replace ${name} options on a project with existing cards`);
+    }
+  }
+}
+
+export function validateSprintField(field) {
+  const iterations = field?.configuration?.iterations;
+  if (!Array.isArray(iterations) || ![1, 2].every((number) =>
+    iterations.some((iteration) => iteration.title === `Sprint ${number}` &&
+      iteration.duration === 7 && iteration.id))) {
+    throw new Error('Sprint field needs one-week Sprint 1 and Sprint 2 iterations before issue seeding');
+  }
+}
+
+export function validateViews(views) {
+  for (const [name, layout, grouping, field] of [
+    ['Board', 'BOARD_LAYOUT', 'verticalGroupByFields', 'Status'],
+    ['Sprint', 'TABLE_LAYOUT', 'groupByFields', 'Sprint'],
+    ['Roadmap', 'ROADMAP_LAYOUT', 'groupByFields', 'Milestone'],
+  ]) {
+    const matches = views.filter((candidate) => candidate.name === name);
+    const view = matches[0];
+    if (matches.length !== 1 || view.layout !== layout ||
+      !view[grouping]?.nodes?.some((candidate) => candidate.name === field)) {
+      throw new Error(`Configure the ${name} view by ${field} in the GitHub Project UI before issue seeding`);
+    }
+  }
+}
+
+export function ensureViews(project, refresh = projectState, create = graphql) {
+  if (project.views.pageInfo?.hasNextPage) throw new Error('Project view lookup was incomplete');
   const byName = Object.fromEntries(project.fields.nodes.map((field) => [field.name, field.id]));
   const visible = ['Status', 'Priority', 'Size', 'Sprint', 'Milestone'].map((name) => {
     if (!byName[name]) throw new Error(`Missing ${name} field for project view`);
@@ -200,9 +270,12 @@ function ensureViews(project) {
   ]) {
     if (!project.views.nodes.some((existing) => existing.name === view.name)) {
       const configuration = view.layout === 'ROADMAP_LAYOUT' ? '' : `,configuration:{visibleFieldIds:${JSON.stringify(visible)}}`;
-      graphql(`mutation { createProjectV2View(input:{projectId:${JSON.stringify(project.id)},name:${JSON.stringify(view.name)},layout:${view.layout}${configuration}}) { projectV2View { id name layout } } }`);
+      create(`mutation { createProjectV2View(input:{projectId:${JSON.stringify(project.id)},name:${JSON.stringify(view.name)},layout:${view.layout}${configuration}}) { projectV2View { id name layout } } }`);
     }
   }
+  const current = refresh(project.number);
+  if (current.views.pageInfo?.hasNextPage) throw new Error('Project view lookup was incomplete');
+  validateViews(current.views.nodes);
 }
 
 function ensureLabels() {
@@ -254,9 +327,35 @@ export function ensureIssue(issues, title, body, issueLabels, create = api, upda
     return issue;
   }
   const created = create('POST', `repos/${repo}/issues`, { title, body, labels: issueLabels });
-  const issue = { number: created.number, title, url: created.html_url, body, milestone: null };
+  const issue = { ...created, number: created.number, title, url: created.html_url, body, milestone: null };
   if (!issue.number || !issue.url) throw new Error(`Issue creation returned no issue URL for ${title}`);
   issues.set(title, issue);
+  return issue;
+}
+
+export function indexManagedIssues(existing) {
+  const managedTitles = new Set(['Definition of Done', ...legacyTitles.values()]);
+  for (const milestone of plan.milestones) {
+    managedTitles.add(`Epic: ${milestone.name}`);
+    for (const story of milestone.stories) managedTitles.add(story.title);
+  }
+  const issues = new Map();
+  for (const issue of existing) {
+    if (!managedTitles.has(issue.title)) continue;
+    if (issues.has(issue.title)) throw new Error(`Duplicate managed issue title: ${issue.title}`);
+    issues.set(issue.title, issue);
+  }
+  for (const [title, issue] of issues) assertOwnedIssue(issue, title);
+  const dod = issues.get('Definition of Done');
+  if (dod && dod.state !== 'open') {
+    throw new Error('Definition of Done is closed or its state is unknown; reopen it before seeding');
+  }
+  return issues;
+}
+
+export function ensureDefinitionOfDone(issues, body, create = api) {
+  const issue = ensureIssue(issues, 'Definition of Done', body, ['docs', 'guardrail'], create);
+  if (issue.state !== 'open') throw new Error('Definition of Done is closed or its state is unknown; reopen it before seeding');
   return issue;
 }
 
@@ -285,13 +384,19 @@ function projectItems(number) {
   return items;
 }
 
-function ensureProjectItem(project, itemIds, issue) {
-  if (itemIds.has(issue.url)) return itemIds.get(issue.url);
-  const contentId = api('GET', `repos/${repo}/issues/${issue.number}`).node_id;
-  const data = graphql(`mutation { addProjectV2ItemById(input:{projectId:${JSON.stringify(project.id)},contentId:${JSON.stringify(contentId)}}) { item { id } } }`);
+export function ensureProjectItem(project, itemIds, issue, get = api, mutate = graphql) {
+  if (itemIds.has(issue.url)) return { id: itemIds.get(issue.url), isNew: false };
+  const contentId = get('GET', `repos/${repo}/issues/${issue.number}`).node_id;
+  const data = mutate(`mutation { addProjectV2ItemById(input:{projectId:${JSON.stringify(project.id)},contentId:${JSON.stringify(contentId)}}) { item { id } } }`);
   const itemId = data.addProjectV2ItemById.item.id;
   itemIds.set(issue.url, itemId);
-  return itemId;
+  return { id: itemId, isNew: true };
+}
+
+export function initializeCard(project, itemIds, issue, fields, add = ensureProjectItem, write = setFields) {
+  const item = add(project, itemIds, issue);
+  if (item.isNew) write(project, item.id, fields);
+  return item.id;
 }
 
 function setFields(project, itemId, entries) {
@@ -320,21 +425,21 @@ function main() {
   }
   if (!process.argv.includes('--apply')) throw new Error('Use --plan to inspect or --apply to create public GitHub resources');
   gh(['auth', 'status']);
+  const existing = apiAll(`repos/${repo}/issues?state=all&per_page=100`)
+    .filter((issue) => !issue.pull_request)
+    .map((issue) => ({ ...issue, url: issue.html_url }));
+  const issues = indexManagedIssues(existing);
   const issuesOnly = process.argv.includes('--issues-only');
   const number = issuesOnly ? undefined : ensureProject();
   const project = issuesOnly ? undefined : ensureFields(number);
   if (project) ensureViews(project);
   ensureLabels();
   const milestones = ensureMilestones();
-  const existing = apiAll(`repos/${repo}/issues?state=all&per_page=100`)
-    .filter((issue) => !issue.pull_request)
-    .map((issue) => ({ ...issue, url: issue.html_url }));
-  const issues = new Map(existing.map((issue) => [issue.title, issue]));
   const itemIds = project ? projectItems(number) : new Map();
-  const dod = ensureIssue(issues, 'Definition of Done', 'A story is Done only when:\n\n- [ ] Lint and typecheck pass.\n- [ ] Unit, replay, and relevant demo tests pass.\n- [ ] Evals and guardrail traceability pass.\n- [ ] Secret scan passes with no private data in the diff.\n- [ ] Public documentation and permission guidance are current.\n- [ ] A reviewed PR links the story and merges into develop.\n\nLive checks are reported separately from local and CI evidence. Completed velocity counts merged stories only.\n', ['docs', 'guardrail']);
+  const dod = ensureDefinitionOfDone(issues, 'A story is Done only when:\n\n- [ ] Lint and typecheck pass.\n- [ ] Unit, replay, and relevant demo tests pass.\n- [ ] Evals and guardrail traceability pass.\n- [ ] Secret scan passes with no private data in the diff.\n- [ ] Public documentation and permission guidance are current.\n- [ ] A reviewed PR links the story and merges into develop.\n\nLive checks are reported separately from local and CI evidence. Completed velocity counts merged stories only.\n');
   if (project) {
     gh(['issue', 'pin', String(dod.number), '--repo', repo]);
-    setFields(project, ensureProjectItem(project, itemIds, dod), [['Status', 'Ready']]);
+    initializeCard(project, itemIds, dod, [['Status', 'Ready']]);
   }
   const resumeAt = process.argv.find((argument) => argument.startsWith('--resume-at='))?.split('=')[1];
   const onlyMilestone = process.argv.find((argument) => argument.startsWith('--only-milestone='))?.split('=')[1];
@@ -344,8 +449,7 @@ function main() {
     if (onlyMilestone && milestone.id !== onlyMilestone) continue;
     const epic = ensureIssue(issues, `Epic: ${milestone.name}`, epicBody(milestone), ['epic', 'guardrail']);
     if (project) {
-      const epicItemId = ensureProjectItem(project, itemIds, epic);
-      setFields(project, epicItemId, [['Status', 'Backlog']]);
+      initializeCard(project, itemIds, epic, [['Status', 'Backlog']]);
     }
     setIssueMilestone(epic, milestone.id, milestones);
     const children = [];
@@ -356,8 +460,7 @@ function main() {
       if (milestone.id === 'I') storyLabels.push('evals');
       const issue = ensureIssue(issues, story.title, issueBody(milestone, story, epic.number, storyIndex), storyLabels);
       if (project) {
-        const itemId = ensureProjectItem(project, itemIds, issue);
-        setFields(project, itemId, [
+        initializeCard(project, itemIds, issue, [
           ['Priority', story.priority],
           ['Size', story.size],
           ['Status', story.sprint === 1 ? 'Ready' : 'Backlog'],
