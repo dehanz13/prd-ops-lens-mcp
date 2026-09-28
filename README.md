@@ -41,6 +41,8 @@ docker compose down
 
 The smoke test checks the demo services and calls the MCP dashboard, metric, host metric, and log tools over stdio. The demo API continuously emits synthetic metrics and logs, so returned row counts vary over time. On Docker Desktop, node-exporter describes the demo's Linux VM, not the laptop host.
 
+The [synthetic terminal cast](docs/demo.cast) is generated from a passing local smoke run with `npm run demo:record`. The recorder keeps only validated summary counts. See [demo steps](docs/demo.md) to reproduce it.
+
 To exercise the real demo Kuma, open `http://127.0.0.1:3001` and finish its
 first-run setup with a local admin credential. Add an HTTP monitor named
 `Synthetic demo API` for `http://demo-api:8080/health`, then publish a status
@@ -111,4 +113,4 @@ The `incident-replay-v1` suite scored **10/10 evidence checks** and **10/10 posi
 2. Validate PostHog with a project-scoped read-only key; verify host and container exporters after an operator deploys them.
 3. Expand incident replay evals, prove the gated demo restart, add agent usage reports, and prepare a release after hosted CI recovers.
 
-See [SECURITY.md](SECURITY.md) for reporting and [CONTRIBUTING.md](CONTRIBUTING.md) for the local check sequence.
+See [SECURITY.md](SECURITY.md) and the [threat model](docs/threat-model.md) for reporting and trust boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) for the local check sequence.

@@ -37,6 +37,15 @@ it('keeps private example configuration out of public tracking', () => {
   expect(ignore).toContain('2026-09-28-codex-answers-ops-lens-mcp.md');
   expect(ignore).toContain('2026-09-27-codex-prompt-sre-observability-mcp-server.md');
   expect(read('config.example.yaml')).not.toMatch(/Bearer\s+[A-Za-z0-9]|AKIA[A-Z0-9]{16}/);
+  const cast = read('docs/demo.cast').trim().split('\n').map((line) => JSON.parse(line));
+  expect(cast[0]).toMatchObject({ version: 2, title: 'Synthetic MCP demo' });
+  expect(cast).toHaveLength(3);
+  const summary = JSON.parse((cast[2] as [number, string, string])[2].trim());
+  expect(summary).toMatchObject({ result: 'pass', hostMetricRows: 1 });
+  expect(Object.keys(summary).sort()).toEqual([
+    'dashboards', 'hostMetricRows', 'logRows', 'lokiScannedBytes', 'metricRows', 'result',
+  ]);
+  expect(read('docs/demo.cast')).not.toMatch(/https?:\/\/|Bearer\s+|@[a-z]+\./i);
 });
 
 it('fails traceability for both missing tests and unknown tags', () => {
