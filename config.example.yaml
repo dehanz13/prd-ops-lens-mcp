@@ -34,6 +34,13 @@ providers:
       - /demo/example
     maxLogWindowMinutes: 60
     maxScanBytes: 5000000
+  iam:
+    enabled: false
+    region: us-east-1
+    profile: readonly-iam-demo
+    credentialsFile: /private/path/to/readonly-iam-credentials
+    roleNames: [demo-observer]
+    analyzerArn: arn:aws:access-analyzer:us-east-1:000000000000:analyzer/demo-external
 writes:
   enabled: false
   demoOnly: true

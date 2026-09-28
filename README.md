@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation, Grafana, Prometheus, Loki, and public Uptime Kuma reads are implemented. A local Docker stack provides synthetic Grafana data for the demo. AWS, PostHog, Hostinger, incident correlation, and agent usage reports remain on the roadmap.
+**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, and IAM reads are implemented locally. A local Docker stack provides synthetic Grafana and uptime data for the demo. Direct AWS reads await a reviewed read-only profile. PostHog, Hostinger, incident correlation, and agent usage reports remain on the roadmap.
 
 ## The examined principle
 
@@ -59,7 +59,8 @@ only the page's public JSON. If no page is published yet, the tool returns
 | `loki_logs` | Implemented | Log frames through Grafana `/api/ds/query`, after a read-only index scan estimate |
 | `uptime_status` | Implemented | Public status-page JSON, newest heartbeat, and safe incident summaries |
 | `cloudwatch_metric_data`, `cloudwatch_alarms`, `cloudwatch_log_groups`, `cloudwatch_logs_insights` | Implemented locally | Bounded AWS metrics, alarms, configured log groups, and Logs Insights with scan accounting |
-| IAM, PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
+| `iam_whoami`, `iam_roles`, `iam_role_policies`, `iam_simulate_access`, `iam_analyzer_findings` | Implemented locally | Configured roles, trust shape, policy counts, one-action simulation, and external-analyzer findings |
+| PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
 | `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
 
 Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
@@ -71,6 +72,8 @@ The server starts with write actions disabled. Grafana startup checks the creden
 Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime.md). It never returns monitor URLs or page configuration. A missing or unpublished page returns `not_published`; incomplete or unreachable data remains `unknown`. Neither is reported as healthy.
 
 CloudWatch requires a named profile in an owner-only credentials file. Startup checks the principal and simulates selected write actions before registering its tools. Logs Insights reads only configured groups, requires a final `| limit`, and stops a query that exceeds its scan cap or deadline. The [AWS permission guide](docs/permissions/aws.md) lists the needed actions. AWS identifiers are redacted by default.
+
+IAM uses the same isolated credential-file rule, plus exact configured role names. It returns trust-policy shape and policy counts without full documents or condition values. Simulation reports `allow`, `deny`, or `unknown` and a matched statement reference. The [IAM permission guide](docs/permissions/iam.md) lists the read actions and their limits. No live IAM account check has been completed.
 
 Loki's `/index/stats` response is an estimate and can exclude recent ingester data. The `examined` block identifies the estimate and reports returned lines separately. Do not interpret a zero-byte estimate as proof that no logs were scanned.
 
@@ -94,7 +97,7 @@ The foundation replay has **1/1 evidence check** and **1/1 positive control** in
 
 ## Roadmap
 
-1. Validate CloudWatch against a supplied least-privilege read profile.
+1. Validate CloudWatch and IAM against supplied, independently reviewed read-only profiles.
 2. PostHog and VPS provider reads, correlation, resources, and prompts.
 3. Incident replay evals, the gated demo restart, agent usage reports, and a tagged release.
 

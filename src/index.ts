@@ -5,6 +5,7 @@ import { createServer } from './server.js';
 import { GrafanaProvider } from './providers/grafana.js';
 import { UptimeProvider } from './providers/uptime.js';
 import { CloudWatchProvider } from './providers/cloudwatch.js';
+import { IamProvider } from './providers/iam.js';
 
 const path = process.env.OPS_LENS_CONFIG;
 if (!path) {
@@ -15,9 +16,11 @@ if (!path) {
     const config = loadConfig(path);
     const grafana = new GrafanaProvider();
     const cloudwatch = new CloudWatchProvider();
+    const iam = new IamProvider();
     await grafana.preflight(config);
     await cloudwatch.preflight(config);
-    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch]));
+    await iam.preflight(config);
+    serveStdio(() => createServer(config, [grafana, new UptimeProvider(), cloudwatch, iam]));
   } catch {
     process.stderr.write('Configuration could not be loaded; check the file path and schema.\n');
     process.exitCode = 1;

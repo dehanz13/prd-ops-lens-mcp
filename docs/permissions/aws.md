@@ -1,5 +1,8 @@
 # AWS CloudWatch read access
 
+For IAM role, policy-simulation, and Access Analyzer reads, use the separate
+[IAM permission guide](iam.md).
+
 Enable CloudWatch with a named profile in a private credentials file. The file
 must be owned by the current user and have no group or other permissions. The
 file must contain only the named profile with `aws_access_key_id`,

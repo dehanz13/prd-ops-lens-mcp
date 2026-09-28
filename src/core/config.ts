@@ -55,6 +55,15 @@ export const ConfigSchema = z.strictObject({
       maxLogWindowMinutes: z.number().int().min(1).max(1440).default(60),
       maxScanBytes: z.number().int().min(1024).max(100_000_000).default(5_000_000),
     }).optional(),
+    iam: z.strictObject({
+      enabled: z.boolean().default(false),
+      region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
+      profile: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+      credentialsFile: absolutePath,
+      roleNames: z.array(z.string().regex(/^[a-zA-Z0-9_+=,.@-]{1,64}$/)).min(1).max(20)
+        .refine((roles) => new Set(roles).size === roles.length, 'Role names must be unique'),
+      analyzerArn: z.string().regex(/^arn:aws:access-analyzer:[a-z0-9-]+:\d{12}:analyzer\/[a-zA-Z0-9_.-]+$/).optional(),
+    }).optional(),
   }).prefault({}),
   writes: z.strictObject({
     enabled: z.boolean().default(false),

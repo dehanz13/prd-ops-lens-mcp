@@ -31,6 +31,9 @@ implemented, so each milestone can end with a green build.
 | G4.2 | Configured log group allowlist | `test/cloudwatch.test.ts` |
 | G4.3 | Logs Insights window, row and scan caps | `test/cloudwatch.test.ts` |
 | G4.4 | Configurable AWS identifier redaction | `test/cloudwatch.test.ts` |
+| G5.1 | Fixed IAM, STS, and Access Analyzer read actions | `test/iam.test.ts` |
+| G5.2 | Trust policy type-only summary | `test/iam.test.ts` |
+| G5.3 | Simulation decision and statement reference only | `test/iam.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |
