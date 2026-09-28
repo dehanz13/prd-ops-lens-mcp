@@ -44,9 +44,18 @@ fi
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/ops-lens-gates.XXXXXX") || exit 2
 checkout="$scratch/checkout"
+mkdir -p "$scratch/dependencies"
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
 cleanup() {
+  local exit_status=$?
+  if [[ ${finished:-0} -ne 1 ]]; then
+    exit_status=2
+    failed=1
+    if declare -F post >/dev/null; then
+      post setup error "self-run, node ${node_version:-unavailable}; controller stopped before all gates" || true
+    fi
+  fi
   if [[ ${failed:-0} -ne 0 && -d $scratch ]]; then
     evidence_dir="$trusted_dir/evidence/$sha"
     (umask 077; mkdir -p "$evidence_dir")
@@ -56,6 +65,8 @@ cleanup() {
   fi
   if [[ -d $checkout ]]; then git -C "$root" worktree remove --force "$checkout" >/dev/null 2>&1 || true; fi
   rm -rf "$scratch"
+  trap - EXIT
+  exit "$exit_status"
 }
 trap cleanup EXIT
 
@@ -85,6 +96,9 @@ if ! git -C "$root" worktree add --detach "$checkout" "$sha" >"$scratch/worktree
   post setup error "self-run, node $node_version; fresh worktree failed" || exit 2
   exit 2
 fi
+# Docker requires a mountpoint to exist before applying the read-only bind.
+# This empty ignored directory carries no checkout content into the gates.
+mkdir -p "$checkout/node_modules"
 cd "$checkout" || exit 2
 
 if [[ ! -f package.json || ! -f package-lock.json ]]; then
@@ -114,10 +128,28 @@ fi
 container() {
   local network=$1
   shift
+  # Each gate gets disposable output mounts; later gates cannot consume files
+  # written by earlier untrusted checkout code.
+  local outputs
+  outputs=$(mktemp -d "$scratch/outputs.XXXXXX") || return 2
+  mkdir -p "$outputs/vite-temp"
+  local dependencies="$scratch/dependencies:/work/node_modules:ro"
+  local install=0
+  if [[ ${1:-} == --install ]]; then
+    dependencies="$scratch/dependencies:/work/node_modules:rw"
+    install=1
+    shift
+  fi
+  local mounts=(-v "$checkout:/work:ro" -v "$dependencies")
+  if (( ! install )); then
+    mounts+=(-v "$outputs/vite-temp:/work/node_modules/.vite-temp:rw")
+  fi
   docker run --rm --network "$network" --cap-drop ALL --security-opt no-new-privileges \
-    --read-only --tmpfs /tmp:rw,nosuid,size=256m --user "$(id -u):$(id -g)" \
+    --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+    --tmpfs /build:rw,nosuid,size=128m --tmpfs /coverage:rw,nosuid,size=128m \
+    --user "$(id -u):$(id -g)" \
     -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache \
-    -v "$checkout:/work" -v "$scratch:/results" -w /work "$container_image" "$@"
+    "${mounts[@]}" -w /work "$container_image" "$@"
 }
 
 failed=0
@@ -129,7 +161,7 @@ summary_for() {
   node -e '
     const fs = require("node:fs");
     const [name, path] = process.argv.slice(1);
-    const log = fs.readFileSync(name === "sbom" ? path.replace(/sbom\.log$/, "sbom.json") : path, "utf8")
+    const log = fs.readFileSync(path, "utf8")
       .replace(/\u001b\[[0-9;]*m/g, "");
     const match = (pattern) => {
       const found = log.match(pattern);
@@ -240,13 +272,14 @@ host_gate() {
   fi
 }
 
-if container bridge npm ci --ignore-scripts >"$scratch/npm-ci.log" 2>&1; then
+if container bridge --install npm ci --ignore-scripts >"$scratch/npm-ci.log" 2>&1; then
   installed=$(rg -o 'added [0-9]+ packages' "$scratch/npm-ci.log" | tail -1 || true)
   if [[ -z $installed ]]; then
     post npm-ci error "self-run, node $node_version; install count unavailable" || exit 2
     setup_ok=0
     failed=1
   else
+    mkdir -p "$scratch/dependencies/.vite-temp"
     post npm-ci success "self-run, node $node_version; $installed" || exit 2
   fi
 else
@@ -260,15 +293,13 @@ fi
 
 gate lint ./node_modules/.bin/eslint .
 gate typecheck ./node_modules/.bin/tsc --noEmit
-gate tests ./node_modules/.bin/vitest run --coverage
+gate tests ./node_modules/.bin/vitest run --coverage --coverage.reportsDirectory=/coverage/report
 gate evals node --import tsx evals/run.ts
 host_gate fixtures node "$trusted_dir/lint-fixtures.mjs" --require-private
 host_gate guardrails node "$trusted_dir/check-guardrails.mjs"
-gate build ./node_modules/.bin/tsc -p tsconfig.build.json
+gate build ./node_modules/.bin/tsc -p tsconfig.build.json --outDir /build
 network_gate audit npm audit --omit=dev
-# The child shell receives the output path as its first positional argument.
-# shellcheck disable=SC2016
-gate sbom bash -c 'npm sbom --package-lock-only --sbom-format cyclonedx > /results/sbom.json'
+gate sbom npm sbom --package-lock-only --sbom-format cyclonedx
 host_gate gitleaks gitleaks git . --no-banner --redact
 
 base=$(git merge-base origin/develop "$sha" 2>/dev/null || true)
@@ -292,4 +323,5 @@ post dependency-review error "self-run, node $node_version; GitHub PR review una
 printf 'dependency-review: unavailable until GitHub Actions runs\n'
 failed=1
 
+finished=1
 exit "$failed"
