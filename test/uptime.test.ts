@@ -51,7 +51,8 @@ it('projects safe monitor and incident fields with the newest heartbeat', async 
     const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
     expect(result.structuredContent).toMatchObject({ data: {
       state: 'available', monitors: [{ state: 'up', uptime24h: 0.98, observedAt: null }, { state: 'unknown' }],
-      incidents: [{ status: 'active' }],
+      incidents: [{ status: 'active', createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:15:00.000Z' }],
     }, examined: { rowCount: 3 } });
     const serialized = JSON.stringify(result);
     for (const planted of ['node.private.example', 'queue.private.example', 'private-css-marker',
@@ -103,5 +104,17 @@ it('treats a missing heartbeat list as unknown, never up', async () => {
   try {
     const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
     expect(result.structuredContent).toMatchObject({ data: { state: 'unknown', monitors: [] } });
+  } finally { await fixture.close(); }
+});
+
+it('treats malformed incident data as unknown, never healthy', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
+    config: { published: true }, incidents: null, publicGroupList: [],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({ data: { state: 'unknown', monitors: [] },
+      examined: { rowCount: 0 } });
   } finally { await fixture.close(); }
 });

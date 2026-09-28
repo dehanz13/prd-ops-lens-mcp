@@ -3,7 +3,7 @@
   "response": {
     "config": { "published": true, "customCSS": "private-css-marker", "analyticsId": "private-analytics-marker" },
     "incidents": [
-      { "title": "API node.private.example degraded", "status": "active", "content": "private-content-marker" }
+      { "title": "API node.private.example degraded", "status": "active", "content": "private-content-marker", "createdDate": "2026-01-01T00:00:00.000Z", "lastUpdatedDate": "2026-01-01T00:15:00.000Z" }
     ],
     "publicGroupList": [{
       "id": 1,

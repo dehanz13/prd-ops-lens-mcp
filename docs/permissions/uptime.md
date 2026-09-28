@@ -8,7 +8,8 @@ or use private monitor APIs.
 
 The status-page response can contain internal monitor URLs and page settings.
 The tool returns only a sanitized group and monitor label, the newest heartbeat
-status, a 24-hour uptime fraction when present, and a short incident summary.
+status, a 24-hour uptime fraction when present, and a short incident summary
+with valid UTC creation and update times when present.
 An HTTP 404, Kuma's HTML fallback for a missing slug, or `published: false` is
 reported as `not_published`. Malformed or
 unreachable data is reported as `unknown`. Neither state means healthy.
