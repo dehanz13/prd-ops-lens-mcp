@@ -92,7 +92,7 @@ export class UptimeProvider implements ProviderModule {
     const heartbeatPath = `/api/status-page/heartbeat/${ctx.uptime.slug}`;
     let statusBody: unknown;
     let heartbeatBody: unknown;
-    let bytes = 0;
+    let bytes: number;
     try {
       const status = await ctx.client.get(statusPath);
       statusBody = status.body;

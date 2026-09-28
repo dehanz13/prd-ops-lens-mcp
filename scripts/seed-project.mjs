@@ -200,7 +200,11 @@ export function ensureProject(runJson = json, runGh = gh, inspect = projectState
   if (!Number.isInteger(number)) throw new Error('GitHub did not return a project number');
   runGh(['project', 'link', String(number), '--owner', owner, '--repo', repo]);
   const readme = `# Sprint goals\n\nSprint 1: ${plan.sprintGoals['1']}\n\nSprint 2: ${plan.sprintGoals['2']}\n\nOne-week iterations. A story is Done only after its checklist, tests, review, and merge into develop. See docs/process.md and the pinned Definition of Done issue. Planned points are not completed velocity.`;
-  runGh(['project', 'edit', String(number), '--owner', owner, '--visibility', 'PUBLIC', '--description', 'A public, evidence-based delivery board for the MCP server.', '--readme', readme]);
+  const edit = ['project', 'edit', String(number), '--owner', owner, '--visibility', 'PUBLIC',
+    '--description', 'A public, evidence-based delivery board for the MCP server.'];
+  // A later sprint note is live project data; rerunning the seeder must not reset it.
+  if (!found) edit.push('--readme', readme);
+  runGh(edit);
   return number;
 }
 

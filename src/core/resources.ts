@@ -79,6 +79,8 @@ export function registerKnowledgeResources(server: McpServer, config: Config, ru
         }
       } catch (error) {
         outcome = error instanceof OpsError ? 'refused' : 'error';
+        // A cause may contain a private resource path; keep it outside MCP output.
+        // eslint-disable-next-line preserve-caught-error
         throw new Error('Configured resource could not be read');
       } finally {
         runtime.audit.record({ at: new Date().toISOString(), tool: `resource:${entry.name}`,

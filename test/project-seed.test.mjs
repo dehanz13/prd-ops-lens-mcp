@@ -123,6 +123,17 @@ test('project selection requires a unique repository link before any write', () 
   assert.equal(writes, 0);
 });
 
+test('project seeding preserves the README on an existing linked project', () => {
+  const calls = [];
+  const inspect = () => ({ repositories: { nodes: [
+    { nameWithOwner: 'dehanz13/prd-ops-lens-mcp' },
+  ], pageInfo: { hasNextPage: false } } });
+  ensureProject(() => ({ projects: [{ number: 3, title: 'prd-ops-lens-mcp roadmap' }] }),
+    (args) => calls.push(args), inspect);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].includes('--readme'), false);
+});
+
 test('managed issue lookup rejects duplicate titles instead of keeping the last one', () => {
   const title = 'Definition of Done';
   const first = { number: 1, title, state: 'open', user: { login: 'dehanz13' } };

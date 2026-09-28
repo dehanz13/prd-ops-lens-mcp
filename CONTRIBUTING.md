@@ -38,6 +38,8 @@ the guardrail IDs and proving tests, its size and priority are set, and known
 dependencies are linked. The test data must be synthetic or explicitly approved
 for bounded read-only checks. A story waiting on a credential or external
 permission stays in Backlog until independent implementation work is clear.
+Estimate new stories at 1, 2, 3, or 5 points. Development work is at least
+2 points; split larger work into independently testable stories.
 
 ## Definition of Done
 
