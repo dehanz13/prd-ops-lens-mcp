@@ -5,17 +5,15 @@ export const AWS_WRITE_ACTIONS = [
   'cloudformation:ExecuteChangeSet',
 ] as const;
 
-export type CredentialCheck = { warning?: string };
+export type CredentialCheck = Record<string, never>;
 
-function refusePowerful(provider: string, override: boolean): CredentialCheck {
-  if (!override) throw new OpsError('REFUSED', `${provider}: credential has write permissions`);
-  return { warning: `WARNING: ${provider} credential has write permissions; use a read-only credential` };
+function refusePowerful(provider: string): never {
+  throw new OpsError('REFUSED', `${provider}: credential has write permissions`);
 }
 
 export async function checkAwsCredential(
   getIdentity: () => Promise<{ arn: string }>,
   simulate: (arn: string, actions: readonly string[]) => Promise<Record<string, boolean>>,
-  override = false,
 ): Promise<CredentialCheck> {
   const identity = await getIdentity();
   if (!identity.arn) throw new OpsError('REFUSED', 'AWS identity could not be verified');
@@ -24,14 +22,12 @@ export async function checkAwsCredential(
     throw new OpsError('REFUSED', 'AWS permissions could not be verified');
   }
   return AWS_WRITE_ACTIONS.some((action) => decisions[action])
-    ? refusePowerful('AWS', override) : {};
+    ? refusePowerful('AWS') : {};
 }
 
 const grafanaWrite = /(?:^|[:.])(?:create|write|update|delete|admin|provision|execute)$/i;
 
-export function checkGrafanaPermissions(
-  permissions: Record<string, unknown>, override = false,
-): CredentialCheck {
+export function checkGrafanaPermissions(permissions: Record<string, unknown>): CredentialCheck {
   if (!permissions || typeof permissions !== 'object' || Object.keys(permissions).length === 0) {
     throw new OpsError('REFUSED', 'Grafana permissions could not be verified');
   }
@@ -40,7 +36,7 @@ export function checkGrafanaPermissions(
     throw new OpsError('REFUSED', 'Grafana permissions could not be verified');
   }
   return actions.some((action) => action === '*' || grafanaWrite.test(action))
-    ? refusePowerful('Grafana', override) : {};
+    ? refusePowerful('Grafana') : {};
 }
 
 export function checkPostHogScopes(
