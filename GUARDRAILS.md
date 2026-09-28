@@ -25,6 +25,8 @@ implemented, so each milestone can end with a green build.
 | G2.2 | PromQL length, range, step and series caps | `test/grafana.test.ts` |
 | G2.3 | LogQL selector, window, regex and scan caps | `test/grafana.test.ts` |
 | G2.4 | Structured log-code matching | `test/grafana.test.ts` |
+| G3.1 | Public status-page JSON only | `test/uptime.test.ts` |
+| G3.2 | Safe monitor projection and newest heartbeat | `test/uptime.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |

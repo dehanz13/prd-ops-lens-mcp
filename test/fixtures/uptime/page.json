@@ -1,0 +1,18 @@
+{
+  "sourceNote": "Hand-made synthetic Uptime Kuma v2 public status page shape from the status-page router contract",
+  "response": {
+    "config": { "published": true, "customCSS": "private-css-marker", "analyticsId": "private-analytics-marker" },
+    "incidents": [
+      { "title": "API node.private.example degraded", "status": "active", "content": "private-content-marker" }
+    ],
+    "publicGroupList": [{
+      "id": 1,
+      "name": "Control plane",
+      "monitorList": [
+        { "id": 7, "name": "API node.private.example", "url": "https://node.private.example/health", "sendUrl": true, "tags": [{ "name": "private-tag-marker" }] },
+        { "id": 8, "name": "Queue worker", "url": "http://queue.private.example:8080/health" }
+      ]
+    }],
+    "maintenanceList": []
+  }
+}

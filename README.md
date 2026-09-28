@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation and Grafana, Prometheus, and Loki reads are implemented. A local Docker stack provides synthetic data for the demo. Uptime, AWS, PostHog, Hostinger, incident correlation, and agent usage reports remain on the roadmap.
+**Status:** The foundation, Grafana, Prometheus, Loki, and public Uptime Kuma reads are implemented. A local Docker stack provides synthetic Grafana data for the demo. AWS, PostHog, Hostinger, incident correlation, and agent usage reports remain on the roadmap.
 
 ## The examined principle
 
@@ -49,7 +49,8 @@ The smoke test checks the demo services and calls the MCP dashboard, metric, and
 | `grafana_search_dashboards`, `grafana_alert_rules` | Implemented | Dashboard titles and alert state through read-only Grafana endpoints |
 | `prometheus_instant`, `prometheus_range` | Implemented | Metric frames through Grafana `/api/ds/query`; range steps are at least 60 seconds |
 | `loki_logs` | Implemented | Log frames through Grafana `/api/ds/query`, after a read-only index scan estimate |
-| Uptime, AWS, PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
+| `uptime_status` | Implemented | Public status-page JSON, newest heartbeat, and safe incident summaries |
+| AWS, PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
 | `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
 
 Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
@@ -57,6 +58,8 @@ Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana cre
 ## Security model
 
 The server starts with write actions disabled. Grafana startup checks the credential's permissions and refuses write-capable tokens by default. Every provider HTTP request must match an exact method and endpoint allowlist. Query windows, sizes, and timeouts are capped. Central redaction masks common identity fields and values, credentials, emails, and IP addresses. Each tool call writes one redacted JSON line to the configured owner-only audit path. The server has no telemetry. Tool output is marked as untrusted data.
+
+Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime.md). It never returns monitor URLs or page configuration. Missing or unpublished status data is unknown, not healthy.
 
 Loki's `/index/stats` response is an estimate and can exclude recent ingester data. The `examined` block identifies the estimate and reports returned lines separately. Do not interpret a zero-byte estimate as proof that no logs were scanned.
 
@@ -80,7 +83,7 @@ The foundation replay has **1/1 evidence check** and **1/1 positive control** in
 
 ## Roadmap
 
-1. Public uptime status and direct AWS reads with limited credentials.
+1. Direct AWS reads with limited credentials.
 2. PostHog and VPS provider reads, correlation, resources, and prompts.
 3. Incident replay evals, the gated demo restart, agent usage reports, and a tagged release.
 
