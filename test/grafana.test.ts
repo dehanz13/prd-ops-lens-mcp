@@ -94,6 +94,22 @@ describe('Grafana tools', () => {
     } finally { await fixture.close(); }
   });
 
+  // @guardrail G2.2: an empty Grafana metric frame means no observed series, not a healthy value.
+  it('returns an examined zero-row result for an absent metric series', async () => {
+    mockServer.use(http.post(`${base}/api/ds/query`, () => HttpResponse.json({
+      results: { A: { frames: [{ schema: { fields: [] }, data: { values: [] } }] } },
+    })));
+    const fixture = await harness();
+    try {
+      const result = await fixture.client.callTool({ name: 'prometheus_instant',
+        arguments: { query: 'node_load1', at: from } });
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toMatchObject({ data: [], examined: {
+        query: 'node_load1', rowCount: 0, scannedCount: 0, truncated: false,
+      } });
+    } finally { await fixture.close(); }
+  });
+
   // @guardrail G2.2: PromQL range bounds and step are checked before a query.
   it('uses at least a 60-second step and caps a range window', async () => {
     mockServer.use(http.post(`${base}/api/ds/query`, async ({ request }) => {

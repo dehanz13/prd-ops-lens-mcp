@@ -47,6 +47,7 @@ function metricRows(source: Frame[], maxRows: number): { rows: unknown[]; series
   let series = 0;
   let scanned = 0;
   for (const frame of source) {
+    if (frame.schema.fields.length === 0 && frame.data.values.length === 0) continue;
     const timeIndex = frame.schema.fields.findIndex((field) => field.type === 'time');
     if (timeIndex < 0) throw new OpsError('UPSTREAM', 'Prometheus: time field missing');
     for (let column = 0; column < frame.schema.fields.length; column += 1) {
