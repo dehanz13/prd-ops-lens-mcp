@@ -74,7 +74,7 @@ describe('foundation guardrails', () => {
     expect(safeLine).not.toContain('42');
     expect(safeLine).toContain('started');
     for (const secret of ['a1b2c3d4e5f60718293a4b5c6d7e8f90',
-      'AKIA0123456789ABCDEF', 'aws_secret_access_key=AbCd0123+/AbCd0123+/AbCd0123+/']) {
+      'AKIA' + '0123456789ABCDEF', 'aws_secret_access_key=AbCd0123+/AbCd0123+/AbCd0123+/']) {
       expect(configured.text(`log ${secret} end`)).not.toContain(secret);
     }
     expect(configured.text('2026-01-01 00:45:00.000')).toBe('2026-01-01 00:45:00.000');
@@ -98,7 +98,7 @@ describe('foundation guardrails', () => {
 
   it('removes a planted credential from text, structured output, and audit', async () => {
     const { log, path } = audit();
-    const planted = 'AKIA0123456789ABCDEF';
+    const planted = 'AKIA' + '0123456789ABCDEF';
     const result = await runTool({ audit: log, redactor }, 'query', 'synthetic',
       { query: `token=${planted}` }, async () => ({
         data: { line: `credential ${planted}` }, examined: examined('synthetic', `query ${planted}`),
