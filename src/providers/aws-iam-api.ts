@@ -6,6 +6,7 @@ import type { Config } from '../core/config.js';
 import { OpsError } from '../core/result.js';
 import { readIsolatedAwsProfile } from './aws-cloudwatch-api.js';
 import { installAwsReadGuard } from './aws-read-guard.js';
+import { completeWriteSimulation } from './aws-write-simulation.js';
 
 type IamConfig = NonNullable<Config['providers']['iam']>;
 
@@ -61,10 +62,7 @@ export class SdkIamReadApi implements IamReadApi {
     const response = await this.iam.send(new SimulatePrincipalPolicyCommand({
       PolicySourceArn: arn, ActionNames: [...actions], ResourceArns: ['*'],
     }), { abortSignal: this.signal() });
-    if (response.IsTruncated) throw new OpsError('REFUSED', 'AWS permission simulation was incomplete');
-    return Object.fromEntries((response.EvaluationResults ?? []).flatMap((result) =>
-      result.EvalActionName && result.EvalDecision
-        ? [[result.EvalActionName, result.EvalDecision === 'allowed']] : []));
+    return completeWriteSimulation(actions, response);
   }
 
   async identity(): Promise<{ arn: string; account: string; principalType: string }> {

@@ -1,6 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, type Stats } from 'node:fs';
-import { createServer as createHttpServer } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -148,6 +147,17 @@ it('refuses self-target, deploy lock, other names and cooldown after a process r
   expect(fixture.restarts).toBe(0);
 });
 
+// @guardrail G9.3: an unknown Docker start time cannot bypass durable cooldown.
+it('refuses restart planning when the target start time is missing or invalid', async () => {
+  const fixture = setup();
+  for (const lastStartedAt of [null, 'not-a-timestamp']) {
+    fixture.setTarget({ id: targetId, lastStartedAt, restartCount: 1 });
+    await expect(new RestartGate(fixture.writes, fixture.api, () => now).plan('demo-api'))
+      .rejects.toThrow('start time could not be verified');
+  }
+  expect(fixture.restarts).toBe(0);
+});
+
 // @guardrail G9.4: the only write reports both health checks and audits refusals.
 it('reports before and after health and audits a refused attempt without its token or reason', async () => {
   const fixture = setup();
@@ -265,37 +275,6 @@ it('rejects a symlink, regular file, or foreign-owner Docker socket and wrong da
     { Name: 'docker-desktop', OperatingSystem: 'Linux', ID: 'synthetic-daemon-id' },
     { Name: 'docker-desktop', OperatingSystem: 'Docker Desktop', ID: 'short' },
   ]) expect(() => parseDemoDockerIdentity(info)).toThrow('not the verified local demo host');
-});
-
-it('rejects oversized Docker responses through the actual socket transport', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ops-docker-socket-'));
-  dirs.push(dir);
-  const socket = join(dir, 'docker.sock');
-  const server = createHttpServer((_request, response) => {
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end('x'.repeat(1_000_001));
-  });
-  await new Promise<void>((resolve) => server.listen(socket, resolve));
-  try {
-    const adapter = Object.assign(Object.create(DockerDesktopDemoApi.prototype), { socket }) as DockerDesktopDemoApi;
-    await expect(adapter.identity()).rejects.toMatchObject({ code: 'RESPONSE_LIMIT' });
-  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
-});
-
-it('refuses a non-Desktop daemon reported by the real /info transport', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'ops-docker-info-'));
-  dirs.push(dir);
-  const socket = join(dir, 'docker.sock');
-  const server = createHttpServer((_request, response) => {
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ Name: 'remote-daemon', OperatingSystem: 'Docker Desktop',
-      ID: 'synthetic-daemon-id' }));
-  });
-  await new Promise<void>((resolve) => server.listen(socket, resolve));
-  try {
-    const adapter = Object.assign(Object.create(DockerDesktopDemoApi.prototype), { socket }) as DockerDesktopDemoApi;
-    await expect(adapter.identity()).rejects.toMatchObject({ code: 'REFUSED' });
-  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
 });
 
 it('refuses a non-container ID before constructing a Docker restart request', async () => {

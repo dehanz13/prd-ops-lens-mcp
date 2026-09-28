@@ -42,7 +42,9 @@ it('maps CloudWatch metric, alarm, group and Logs Insights reads to fixed SDK co
     if (command instanceof DescribeAlarmsCommand) {
       expect(command.input.AlarmTypes).toEqual(['MetricAlarm', 'CompositeAlarm']);
       return { MetricAlarms: [{ AlarmName: 'demo-alarm', StateValue: 'OK',
-        StateUpdatedTimestamp: new Date('2026-01-01T00:00:00Z') }] };
+        StateUpdatedTimestamp: new Date('2026-01-01T00:00:00Z') }],
+      CompositeAlarms: [{ AlarmName: 'demo-composite', StateValue: 'ALARM',
+        StateUpdatedTimestamp: new Date('2026-01-01T00:01:00Z') }] };
     }
     throw new Error('unexpected CloudWatch command');
   });
@@ -67,7 +69,10 @@ it('maps CloudWatch metric, alarm, group and Logs Insights reads to fixed SDK co
     dimensions: {}, statistic: 'Average', periodSeconds: 60, from: '2026-01-01T00:00:00Z',
     to: '2026-01-01T00:01:00Z', maxPoints: 2 });
   expect(metric).toEqual({ points: [{ at: '2026-01-01T00:00:00.000Z', value: 3 }], partial: false });
-  expect(await api.alarms(1)).toMatchObject({ rows: [{ name: 'demo-alarm', state: 'OK' }], more: false });
+  expect(await api.alarms(1)).toMatchObject({ rows: [{ name: 'demo-alarm', state: 'OK' }], more: true });
+  expect(await api.alarms(2)).toMatchObject({ rows: [
+    { name: 'demo-alarm', state: 'OK' }, { name: 'demo-composite', state: 'ALARM' },
+  ], more: false });
   expect(await api.logGroup('/demo/allowed')).toEqual({ name: '/demo/allowed', storedBytes: 42 });
   const queryId = await api.startLogs(['/demo/allowed'], '2026-01-01T00:00:00Z',
     '2026-01-01T00:01:00Z', 'fields @message | limit 1', 1, 500);
@@ -75,7 +80,7 @@ it('maps CloudWatch metric, alarm, group and Logs Insights reads to fixed SDK co
   expect(await api.pollLogs(queryId, 500)).toMatchObject({ status: 'Complete',
     bytesScanned: 512, recordsScanned: 2 });
   await api.stopLogs(queryId);
-  expect(calls).toEqual(['GetMetricDataCommand', 'DescribeAlarmsCommand',
+  expect(calls).toEqual(['GetMetricDataCommand', 'DescribeAlarmsCommand', 'DescribeAlarmsCommand',
     'DescribeLogGroupsCommand', 'StartQueryCommand', 'GetQueryResultsCommand', 'StopQueryCommand']);
 });
 
@@ -126,6 +131,22 @@ it('refuses an allowed simulation decision, a truncated simulation, and a mismat
   }));
   expect(await api.simulateWrites('arn:aws:iam::000000000000:role/synthetic-role',
     ['iam:CreateRole'])).toEqual({ 'iam:CreateRole': true });
+});
+
+// @guardrail G1.1: missing policy context cannot establish zero write access.
+it('refuses incomplete or unrecognized CloudWatch write decisions', async () => {
+  const api = adapter();
+  replaceClient(api, 'iamClient', () => ({ EvaluationResults: [{
+    EvalActionName: 'iam:CreateRole', EvalDecision: 'implicitDeny',
+    MissingContextValues: ['aws:RequestTag/synthetic'],
+  }] }));
+  await expect(api.simulateWrites('arn:aws:iam::000000000000:user/synthetic',
+    ['iam:CreateRole'])).rejects.toMatchObject({ code: 'REFUSED' });
+  replaceClient(api, 'iamClient', () => ({ EvaluationResults: [{
+    EvalActionName: 'iam:CreateRole', EvalDecision: 'notEvaluated',
+  }] }));
+  await expect(api.simulateWrites('arn:aws:iam::000000000000:user/synthetic',
+    ['iam:CreateRole'])).rejects.toMatchObject({ code: 'REFUSED' });
 });
 
 // @guardrail G0.9: the CloudWatch provider cannot inherit another AWS profile or run a credential process.

@@ -1,4 +1,4 @@
-import { closeSync, constants, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { Config } from './config.js';
@@ -10,19 +10,43 @@ function readConfiguredFile(directory: string, name: string): string {
   if (!root.isDirectory() || root.isSymbolicLink() || root.uid !== process.getuid?.() ||
     (root.mode & 0o077) !== 0) throw new OpsError('REFUSED', 'Resource directory must be owner-only');
   const rootPath = realpathSync(directory);
-  const path = join(directory, name);
+  const resolvedRoot = lstatSync(rootPath);
+  if (resolvedRoot.dev !== root.dev || resolvedRoot.ino !== root.ino) {
+    throw new OpsError('REFUSED', 'Resource directory changed before it could be read');
+  }
+  const path = join(rootPath, name);
   const file = lstatSync(path);
   if (!file.isFile() || file.isSymbolicLink() || file.uid !== process.getuid?.() ||
-    (file.mode & 0o077) !== 0) throw new OpsError('REFUSED', 'Resource must be an owner-only regular file');
+    (file.mode & 0o077) !== 0 || file.nlink !== 1) {
+    throw new OpsError('REFUSED', 'Resource must be an owner-only regular file');
+  }
   if (file.size > 65_536) throw new OpsError('QUERY_LIMIT', 'Resource exceeds 64 KiB');
   const real = realpathSync(path);
   const suffix = relative(rootPath, real);
   if (!suffix || suffix === '..' || suffix.startsWith(`..${sep}`)) {
     throw new OpsError('REFUSED', 'Resource is outside its configured directory');
   }
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    return readFileSync(fd, 'utf8');
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.uid !== process.getuid?.() ||
+      (opened.mode & 0o077) !== 0 || opened.nlink !== 1 || opened.dev !== file.dev ||
+      opened.ino !== file.ino) {
+      throw new OpsError('REFUSED', 'Resource changed before it could be read');
+    }
+    const currentRoot = lstatSync(rootPath);
+    if (currentRoot.dev !== root.dev || currentRoot.ino !== root.ino) {
+      throw new OpsError('REFUSED', 'Resource directory changed before it could be read');
+    }
+    const bytes = Buffer.alloc(65_537);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > 65_536) throw new OpsError('QUERY_LIMIT', 'Resource exceeds 64 KiB');
+    return bytes.subarray(0, length).toString('utf8');
   } finally {
     closeSync(fd);
   }

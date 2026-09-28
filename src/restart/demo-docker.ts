@@ -1,5 +1,6 @@
-import { request } from 'node:http';
+import { Agent, request } from 'node:http';
 import { lstatSync, type Stats } from 'node:fs';
+import { Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { OpsError } from '../core/result.js';
@@ -57,41 +58,90 @@ export function parseDemoDockerIdentity(value: unknown): string {
 
 /** A fixed Docker Desktop socket and fixed demo API paths; no CLI or remote host. */
 export class DockerDesktopDemoApi implements DemoRestartApi {
+  private readonly socketIdentity: { dev: number; ino: number };
+  private readonly agent = new Agent({ keepAlive: true, maxSockets: 1, maxFreeSockets: 1 });
+  private pendingCall: Promise<void> = Promise.resolve();
+  private allowNewConnection = false;
+
   constructor(private readonly socket: string) {
     if (socket !== join(homedir(), '.docker/run/docker.sock')) {
       throw new OpsError('REFUSED', 'Demo writes require the local Docker Desktop socket');
     }
-    verifyDemoDockerSocket(socket, lstatSync(socket));
+    const status = lstatSync(socket);
+    verifyDemoDockerSocket(socket, status);
+    this.socketIdentity = { dev: status.dev, ino: status.ino };
+    const createConnection = this.agent.createConnection.bind(this.agent);
+    this.agent.createConnection = (options, callback) => {
+      try {
+        if (!this.allowNewConnection) {
+          throw new OpsError('REFUSED', 'Verified local Docker connection is unavailable');
+        }
+        this.verifySocketIdentity();
+        const connected = createConnection(options, callback);
+        if (!connected) throw new OpsError('REFUSED', 'Verified local Docker connection is unavailable');
+        connected.once('connect', () => {
+          try { this.verifySocketIdentity(); }
+          catch (error) { connected.destroy(error as Error); }
+        });
+        return connected;
+      } catch (error) {
+        const blocked = new Socket();
+        process.nextTick(() => blocked.destroy(error as Error));
+        return blocked;
+      }
+    };
+  }
+
+  private verifySocketIdentity(): void {
+    let status: Stats;
+    try { status = lstatSync(this.socket); }
+    catch { throw new OpsError('REFUSED', 'Local Docker Desktop socket changed'); }
+    verifyDemoDockerSocket(this.socket, status);
+    if (status.dev !== this.socketIdentity.dev || status.ino !== this.socketIdentity.ino) {
+      throw new OpsError('REFUSED', 'Local Docker Desktop socket changed');
+    }
   }
 
   private async call(method: 'GET' | 'POST', path: string): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const connection = request({ socketPath: this.socket, method, path,
-        headers: { Accept: 'application/json' }, timeout: 5000 }, (response) => {
-        let bytes = 0;
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => {
-          bytes += chunk.length;
-          if (bytes > 1_000_000) {
-            reject(new OpsError('RESPONSE_LIMIT', 'Local Docker response exceeded byte cap'));
-            connection.destroy();
-            return;
-          }
-          chunks.push(chunk);
+    const previous = this.pendingCall;
+    let release!: () => void;
+    this.pendingCall = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    this.allowNewConnection = method === 'GET' && path === '/info';
+    try {
+      this.verifySocketIdentity();
+      return await new Promise((resolve, reject) => {
+        const connection = request({ socketPath: this.socket, agent: this.agent, method, path,
+          headers: { Accept: 'application/json' }, timeout: 5000 }, (response) => {
+          let bytes = 0;
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk: Buffer) => {
+            bytes += chunk.length;
+            if (bytes > 1_000_000) {
+              reject(new OpsError('RESPONSE_LIMIT', 'Local Docker response exceeded byte cap'));
+              connection.destroy();
+              return;
+            }
+            chunks.push(chunk);
+          });
+          response.on('end', () => {
+            if (response.statusCode !== 200 && response.statusCode !== 204) {
+              reject(new OpsError('REFUSED', 'Local demo Docker operation failed')); return;
+            }
+            try {
+              resolve(response.statusCode === 204 ? null : JSON.parse(Buffer.concat(chunks).toString('utf8')));
+            } catch { reject(new OpsError('REFUSED', 'Local Docker response was malformed')); }
+          });
         });
-        response.on('end', () => {
-          if (response.statusCode !== 200 && response.statusCode !== 204) {
-            reject(new OpsError('REFUSED', 'Local demo Docker operation failed')); return;
-          }
-          try {
-            resolve(response.statusCode === 204 ? null : JSON.parse(Buffer.concat(chunks).toString('utf8')));
-          } catch { reject(new OpsError('REFUSED', 'Local Docker response was malformed')); }
-        });
+        connection.on('timeout', () => connection.destroy(new OpsError('QUERY_LIMIT', 'Local Docker request timed out')));
+        connection.on('error', (error) => reject(error instanceof OpsError ? error :
+          new OpsError('REFUSED', 'Local Docker socket request failed')));
+        connection.end();
       });
-      connection.on('timeout', () => connection.destroy(new OpsError('QUERY_LIMIT', 'Local Docker request timed out')));
-      connection.on('error', () => reject(new OpsError('REFUSED', 'Local Docker socket request failed')));
-      connection.end();
-    });
+    } finally {
+      this.allowNewConnection = false;
+      release();
+    }
   }
 
   async identity(): Promise<string> {

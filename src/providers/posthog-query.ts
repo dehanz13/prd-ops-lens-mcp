@@ -59,8 +59,8 @@ function safeProjection(projection: string): string[] {
 export function boundedHogql(query: string, from: string, to: string, maximumRows: number,
   maximumMinutes: number): { query: string; columns: string[]; limit: number;
     window: { from: string; to: string } } {
-  if (query.length > 4000 || !/(?:Z|[+-]\d{2}:\d{2})$/.test(from) ||
-    !/(?:Z|[+-]\d{2}:\d{2})$/.test(to)) {
+  const exactTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+  if (query.length > 4000 || !exactTimestamp.test(from) || !exactTimestamp.test(to)) {
     throw new OpsError('QUERY_LIMIT', 'HogQL or UTC window is invalid');
   }
   const start = Date.parse(from); const end = Date.parse(to);
@@ -115,8 +115,8 @@ export function boundedHogql(query: string, from: string, to: string, maximumRow
     ['group', 'order', 'limit'].includes(word.value))?.start ?? query.length;
   const prefix = query.slice(0, insertion).trimEnd();
   const suffix = query.slice(insertion).trimStart();
-  const utc = (value: number) => new Date(value).toISOString().slice(0, 19).replace('T', ' ');
-  const window = `timestamp >= toDateTime('${utc(start)}', 'UTC') AND timestamp <= toDateTime('${utc(end)}', 'UTC')`;
+  const utc = (value: number) => new Date(value).toISOString().slice(0, -1).replace('T', ' ');
+  const window = `timestamp >= toDateTime64('${utc(start)}', 3, 'UTC') AND timestamp <= toDateTime64('${utc(end)}', 3, 'UTC')`;
   const whereWord = tokens.find((word) => word.value === 'where');
   const condition = whereWord ? query.slice(whereWord.end, insertion).trim() : '';
   if (whereWord && !condition) throw new OpsError('REFUSED', 'HogQL WHERE is empty');

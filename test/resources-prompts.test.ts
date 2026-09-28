@@ -1,5 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { chmodSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -45,6 +45,12 @@ it('rejects a linked file outside the configured directory and an exposed file',
     await expect(fixture.client.readResource({ uri: 'ops-lens://system-map' }))
       .rejects.toThrow('Configured resource could not be read');
   } finally { await fixture.close(); }
+  linkSync(join(outside, 'outside.md'), join(directory, 'hardlinked.md'));
+  const hardlinked = await harness(directory, 'hardlinked.md');
+  try {
+    await expect(hardlinked.client.readResource({ uri: 'ops-lens://system-map' }))
+      .rejects.toThrow('Configured resource could not be read');
+  } finally { await hardlinked.close(); }
   writeFileSync(join(directory, 'public.md'), 'Public', { mode: 0o644 });
   const exposed = await harness(directory, 'public.md');
   try {

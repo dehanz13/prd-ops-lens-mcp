@@ -120,3 +120,14 @@ it('rejects a truncated write simulation and an assumed role with the wrong Role
   }));
   expect(await api.simulateWrites(roleArn, ['iam:CreateRole'])).toEqual({ 'iam:CreateRole': true });
 });
+
+// @guardrail G1.1: IAM startup refuses a conditional write decision without its context.
+it('refuses an IAM write simulation with missing context', async () => {
+  const api = adapter();
+  replaceClient(api, 'iam', () => ({ EvaluationResults: [{
+    EvalActionName: 'iam:CreateRole', EvalDecision: 'implicitDeny',
+    MissingContextValues: ['aws:RequestTag/synthetic'],
+  }] }));
+  await expect(api.simulateWrites(roleArn, ['iam:CreateRole']))
+    .rejects.toMatchObject({ code: 'REFUSED' });
+});
