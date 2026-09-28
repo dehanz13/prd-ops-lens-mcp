@@ -10,6 +10,10 @@ The status-page response can contain internal monitor URLs and page settings.
 The tool returns only a sanitized group and monitor label, the newest heartbeat
 status, a 24-hour uptime fraction when present, and a short incident summary
 with valid UTC creation and update times when present.
+Hostnames from monitor URLs are removed wherever they recur in public labels.
+An `up` or `down` heartbeat is current only when its absolute timestamp is
+within `maxHeartbeatAgeSeconds` (default 600 seconds); stale, future-dated,
+and ambiguous timestamps produce `unknown` health.
 An HTTP 404, Kuma's HTML fallback for a missing slug, or `published: false` is
 reported as `not_published`. Malformed or
 unreachable data is reported as `unknown`. Neither state means healthy.

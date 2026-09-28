@@ -49,6 +49,9 @@ it('keeps private example configuration out of public tracking', () => {
 });
 
 it('fails traceability for both missing tests and unknown tags', () => {
-  expect(checkTraceability('| G0.1 | thing | test |', [])).toEqual({ missing: ['G0.1'], unknown: [] });
+  expect(checkTraceability('| G0.1 | thing | `test/one.test.ts` |', [])).toEqual({ missing: ['G0.1'], unknown: [] });
   expect(checkTraceability('', ['// @guardrail G0.2'])).toEqual({ missing: [], unknown: ['G0.2'] });
+  expect(checkTraceability('| G0.1 | thing | `test/one.test.ts` |', [
+    { path: 'test/other.test.ts', source: '// @guardrail G0.1' },
+  ])).toEqual({ missing: ['G0.1'], unknown: [] });
 });

@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import { randomUUID } from 'node:crypto';
 import type { AuditLog } from './audit.js';
 import { Redactor } from './redaction.js';
 import { examined, OpsError, ToolResultSchema, type ToolResult } from './result.js';
@@ -27,6 +28,7 @@ export type ToolRuntime = {
   maxOutputBytes?: number;
   limiter?: ProviderLimiter;
   providerWarnings?: Map<string, string>;
+  evidence?: Map<string, { tool: string; result: ToolResult }>;
 };
 
 /** The sole MCP result exit: validate, redact, cap, audit, and then encode. */
@@ -38,19 +40,39 @@ export function emit(
   outcome: 'ok' | 'refused' | 'error',
   raw: ToolResult<unknown>,
 ): CallToolResult {
-  let safe = runtime.redactor.value(ToolResultSchema.parse(raw));
+  let safe: ToolResult<unknown>;
+  let actualOutcome = outcome;
   const maxBytes = runtime.maxOutputBytes ?? 65_536;
-  if (Buffer.byteLength(`${UNTRUSTED_DATA_NOTICE}\n${JSON.stringify(safe)}`) > maxBytes) {
-    safe = {
-      data: { message: 'Output exceeded the configured size cap; narrow the query' },
-      examined: { ...safe.examined, query: safe.examined.query.slice(0, 200), rowCount: 0,
-        truncated: true, warnings: ['Output size cap applied'] },
-    };
+  try {
+    safe = runtime.redactor.value(ToolResultSchema.parse(raw));
+    const evidenceReserve = runtime.evidence && safe.examined.provider !== 'local' ? 80 : 0;
+    if (Buffer.byteLength(`${UNTRUSTED_DATA_NOTICE}\n${JSON.stringify(safe)}`) + evidenceReserve > maxBytes) {
+      safe = {
+        data: { message: 'Output exceeded the configured size cap; narrow the query' },
+        examined: { ...safe.examined, query: safe.examined.query.slice(0, 200), rowCount: 0,
+          truncated: true, warnings: ['Output size cap applied'] },
+      };
+    }
+  } catch {
+    actualOutcome = 'error';
+    safe = { data: { error: 'Provider output could not be safely encoded', code: 'PROVIDER_ERROR' },
+      examined: examined('local', `${tool} output failed`, {
+        warnings: ['No safe provider output was returned'],
+      }) };
   }
   runtime.audit.record({ at: new Date().toISOString(), tool, parameters, durationMs,
-    examined: safe.examined, outcome });
+    examined: safe.examined, outcome: actualOutcome });
+  if (actualOutcome === 'ok' && runtime.evidence && safe.examined.provider !== 'local') {
+    const evidenceId = randomUUID();
+    safe = { ...safe, evidenceId };
+    runtime.evidence.set(evidenceId, { tool, result: safe });
+    if (runtime.evidence.size > 128) {
+      const oldest = runtime.evidence.keys().next().value;
+      if (oldest) runtime.evidence.delete(oldest);
+    }
+  }
   return {
-    isError: outcome !== 'ok',
+    isError: actualOutcome !== 'ok',
     content: [{ type: 'text', text: `${UNTRUSTED_DATA_NOTICE}\n${JSON.stringify(safe)}` }],
     structuredContent: safe,
   };
@@ -79,15 +101,24 @@ export async function runTool<T>(
     const window = typeof from === 'string' && typeof to === 'string' &&
       Number.isFinite(Date.parse(from)) && Number.isFinite(Date.parse(to))
       ? { from: new Date(from).toISOString(), to: new Date(to).toISOString() } : undefined;
+    let errorExamined;
+    try {
+      errorExamined = examined(provider, typeof parametersObject.query === 'string'
+        ? parametersObject.query : `${tool} failed`, {
+        ...(window ? { window } : {}),
+        ...(error instanceof OpsError ? error.details : {}),
+        warnings: ['No complete result was returned'],
+      });
+    } catch {
+      errorExamined = examined(provider, `${tool} failed`, {
+        warnings: ['Provider error details were invalid and omitted'],
+      });
+    }
     result = {
       data: error instanceof OpsError
         ? { error: error.message, code: error.code }
         : { error: `${provider}: request failed; check configuration and permissions`, code: 'PROVIDER_ERROR' },
-      examined: examined(provider, typeof parametersObject.query === 'string' ? parametersObject.query : `${tool} failed`, {
-        ...(window ? { window } : {}),
-        ...(error instanceof OpsError ? error.details : {}),
-        warnings: ['No complete result was returned'],
-      }),
+      examined: errorExamined,
     };
   } finally {
     release?.();

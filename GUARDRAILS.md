@@ -38,9 +38,9 @@ implemented, so each milestone can end with a green build.
 | G6.2 | Identity-safe projections; no recording or console route | `test/posthog.test.ts` |
 | G6.3 | Exact project allowlist and key scope binding | `test/posthog.test.ts` |
 | G7.1 | No Hostinger API provider or owner-scoped token path | `test/host-health.test.ts` |
-| G7.2 | Demo node exporter metrics read through Grafana only | `test/host-health.test.ts` |
-| G7.3 | Reachability from public Kuma status JSON; missing page is not healthy | `test/uptime.test.ts` |
-| G8.1 | Cited client-supplied evidence, ordered events, unknown missing sources | `test/timeline.test.ts` |
+| G7.4 | Demo node exporter metrics read through Grafana only | `test/host-health.test.ts` |
+| G7.5 | Reachability from public Kuma status JSON; missing page is not healthy | `test/uptime.test.ts` |
+| G8.1 | Server-issued evidence IDs, ordered events, unknown missing sources | `test/timeline.test.ts` |
 | G8.2 | Explicit owner-only resources confined to configured directory | `test/resources-prompts.test.ts` |
 | G8.3 | Prompts preserve untrusted-data and read-only guidance | `test/resources-prompts.test.ts` |
 | G9.1 | Demo write startup flag, exact allowlist, and absent kill switch | `test/restart.test.ts` |
@@ -60,3 +60,8 @@ implemented, so each milestone can end with a green build.
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |
 | G11.4 | Restricted offline CI | `test/repository-guardrails.test.ts` |
 | G11.5 | Synthetic public fixtures | `test/repository-guardrails.test.ts` |
+
+G7.2 (SSH command confinement) and G7.3 (Docker-group exclusion) are retired, not
+reassigned. The founder removed the Hostinger/SSH provider from v1 because its
+credential could not be scoped to read-only access. G7.4 and G7.5 trace the
+approved Grafana and public Kuma replacement.

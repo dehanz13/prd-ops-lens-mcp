@@ -25,12 +25,12 @@ function syntheticFiles() {
         output_tokens: 20 } }, message: planted } },
   ].map((entry) => JSON.stringify(entry)).join('\n'), { mode: 0o600 });
   const assistant = { type: 'assistant', timestamp: '2026-01-12T00:01:00.000Z',
-    sessionId: 'session-beta', message: { model: 'synthetic-model-v1',
+    sessionId: 'session-beta', message: { id: 'msg-synthetic-1', model: 'synthetic-model-v1',
       usage: { input_tokens: 50, output_tokens: 10, cache_read_input_tokens: 20,
         cache_creation_input_tokens: 5 }, content: planted, tool_input: planted } };
   writeFileSync(claude, [
     { type: 'system', timestamp: '2026-01-12T00:00:00.000Z', sessionId: 'session-beta', text: planted },
-    assistant, assistant,
+    assistant, assistant, { ...assistant, timestamp: '2026-01-12T00:02:00.000Z' },
   ].map((entry) => JSON.stringify(entry)).join('\n'), { mode: 0o600 });
   return { directory, codex, claude, planted };
 }
@@ -91,9 +91,9 @@ it('serves a bounded report and weekly trend through real MCP calls', async () =
     expect(JSON.stringify(report)).not.toContain('SYNTHETIC_SECRET_DO_NOT_EXPORT');
     expect(JSON.stringify(report)).not.toContain('fake@example.test');
     expect(JSON.stringify(report)).not.toContain('/private/synthetic');
-    const trend = await client.callTool({ name: 'agent_usage_trend', arguments: args });
+    const trend = await client.callTool({ name: 'agent_usage_trend', arguments: { ...args, limit: 1 } });
     expect(trend.structuredContent).toMatchObject({ data: { drift: [{ kind: 'feature',
-      currentWeekTokens: 85, previousWeekTokens: 120 }] } });
+      currentWeekTokens: 85, previousWeekTokens: 120 }] }, examined: { truncated: false, rowCount: 2 } });
     const refused = await client.callTool({ name: 'agent_usage_report', arguments: {
       from: args.from, to: '2026-07-01T00:00:00.000Z',
     } });

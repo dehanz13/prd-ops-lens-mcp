@@ -28,17 +28,26 @@ export function uptimeRoutes(slug: string) {
   ];
 }
 
-function safeLabel(value: string, monitorUrl?: string): string {
+function safeLabel(value: string, hostnames: readonly string[]): string {
   let result = value.replace(/https?:\/\/[^\s]+/gi, '[REDACTED]')
-    .replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/gi, '[REDACTED]')
+    .replace(/\b(?:[a-z0-9_-]+\.)+[a-z0-9_-]+\b/gi, '[REDACTED]')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[REDACTED]');
-  if (monitorUrl) {
-    try {
-      const host = new URL(monitorUrl).hostname;
-      if (host) result = result.replace(new RegExp(escapeRegExp(host), 'gi'), '[REDACTED]');
-    } catch { /* The untrusted URL is discarded below. */ }
+  for (const host of hostnames) {
+    result = result.replace(new RegExp(escapeRegExp(host), 'gi'), '[REDACTED]');
   }
   return result.slice(0, 200);
+}
+
+function monitorHosts(groups: z.output<typeof groupSchema>[]): string[] {
+  const hosts = new Set<string>();
+  for (const group of groups) for (const monitor of group.monitorList) {
+    if (!monitor.url) continue;
+    try {
+      const hostname = new URL(monitor.url).hostname;
+      if (hostname) hosts.add(hostname);
+    } catch { /* Invalid public URLs are never returned. */ }
+  }
+  return [...hosts].sort((a, b) => b.length - a.length);
 }
 
 function escapeRegExp(value: string): string {
@@ -109,17 +118,22 @@ export class UptimeProvider implements ProviderModule {
 
     const warnings: string[] = [];
     let scanned = 0;
+    const hostnames = monitorHosts(page.data.publicGroupList);
     const monitors = page.data.publicGroupList.flatMap((group) => group.monitorList.map((monitor) => {
       const list = heartbeat.data.heartbeatList[String(monitor.id)];
       scanned += list?.length ?? 0;
       const newest = list?.at(-1);
-      const state = newest ? statusName(newest.status) : 'unknown';
+      const observedAt = newest ? unambiguousTime(newest.time) : null;
+      const ageMs = observedAt ? Date.now() - Date.parse(observedAt) : Number.POSITIVE_INFINITY;
+      const fresh = ageMs >= 0 && ageMs <= ctx.uptime.maxHeartbeatAgeSeconds * 1000;
+      const state = newest && fresh ? statusName(newest.status) : 'unknown';
       if (state === 'unknown') warnings.push('A monitor has no usable heartbeat');
-      if (newest && !unambiguousTime(newest.time)) warnings.push('A heartbeat time lacked a UTC offset; timestamp omitted');
+      if (newest && !observedAt) warnings.push('A heartbeat time lacked a UTC offset; timestamp omitted');
+      if (newest && observedAt && !fresh) warnings.push('A monitor heartbeat is stale or future-dated');
       const uptime24 = heartbeat.data.uptimeList[`${monitor.id}_24`];
       return {
-        group: safeLabel(group.name), name: safeLabel(monitor.name, monitor.url), state,
-        observedAt: newest ? unambiguousTime(newest.time) : null,
+        group: safeLabel(group.name, hostnames), name: safeLabel(monitor.name, hostnames), state,
+        observedAt,
         uptime24h: uptime24 !== undefined && uptime24 >= 0 && uptime24 <= 1 ? uptime24 : null,
       };
     }));
@@ -128,8 +142,8 @@ export class UptimeProvider implements ProviderModule {
       const parsed = z.object({ title: z.string().optional(), status: z.string().optional(),
         createdDate: z.string().optional(), lastUpdatedDate: z.string().optional() })
         .passthrough().safeParse(item);
-      return { title: parsed.success ? safeLabel(parsed.data.title ?? 'Untitled incident') : 'Untitled incident',
-        status: parsed.success ? safeLabel(parsed.data.status ?? 'unknown') : 'unknown',
+      return { title: parsed.success ? safeLabel(parsed.data.title ?? 'Untitled incident', hostnames) : 'Untitled incident',
+        status: parsed.success ? safeLabel(parsed.data.status ?? 'unknown', hostnames) : 'unknown',
         createdAt: parsed.success && parsed.data.createdDate
           ? unambiguousTime(parsed.data.createdDate) : null,
         updatedAt: parsed.success && parsed.data.lastUpdatedDate

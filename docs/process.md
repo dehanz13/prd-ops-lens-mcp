@@ -24,8 +24,9 @@ enter the sprint only when their credentials and guardrail work are Ready.
 
 ## Local verification while hosted CI is unavailable
 
-For each new PR head, run `scripts/local-gates.sh <full-commit-sha>` with Node 22
-or newer. The script creates a fresh temporary worktree at that exact commit,
+For each new PR head, run the owner-only installed controller described in
+`CONTRIBUTING.md` with the full commit SHA. The controller creates a fresh
+temporary worktree at that exact commit,
 installs from the lockfile, and runs lint, typecheck, coverage tests, evals,
 guardrail traceability, build, production dependency audit, SBOM generation,
 gitleaks, and the private denylist. It posts `local/*` commit statuses with

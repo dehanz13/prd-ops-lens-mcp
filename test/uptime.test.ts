@@ -17,7 +17,11 @@ const mockServer = setupServer();
 beforeAll(() => mockServer.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => mockServer.use(
   http.get(`${base}/api/status-page/demo`, () => HttpResponse.json(pageFixture.response)),
-  http.get(`${base}/api/status-page/heartbeat/demo`, () => HttpResponse.json(heartbeatFixture.response)),
+  http.get(`${base}/api/status-page/heartbeat/demo`, () => {
+    const response = structuredClone(heartbeatFixture.response);
+    response.heartbeatList['7'][1]!.time = new Date().toISOString();
+    return HttpResponse.json(response);
+  }),
 ));
 afterEach(() => mockServer.resetHandlers());
 afterAll(() => mockServer.close());
@@ -50,7 +54,7 @@ it('projects safe monitor and incident fields with the newest heartbeat', async 
   try {
     const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
     expect(result.structuredContent).toMatchObject({ data: {
-      state: 'available', monitors: [{ state: 'up', uptime24h: 0.98, observedAt: null }, { state: 'unknown' }],
+      state: 'available', monitors: [{ state: 'up', uptime24h: 0.98, observedAt: expect.any(String) }, { state: 'unknown' }],
       incidents: [{ status: 'active', createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:15:00.000Z' }],
     }, examined: { rowCount: 3 } });
@@ -60,6 +64,37 @@ it('projects safe monitor and incident fields with the newest heartbeat', async 
       expect(serialized).not.toContain(planted);
     }
     expect(readFileSync(fixture.auditPath, 'utf8').trim().split('\n')).toHaveLength(1);
+  } finally { await fixture.close(); }
+});
+
+it('does not report a stale up heartbeat as current health', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/heartbeat/demo`, () => {
+    const response = structuredClone(heartbeatFixture.response);
+    response.heartbeatList['7'][1]!.time = new Date(Date.now() - 3_600_000).toISOString();
+    return HttpResponse.json(response);
+  }));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({
+      examined: { warnings: expect.arrayContaining(['A monitor heartbeat is stale or future-dated']) },
+    });
+    const monitors = (result.structuredContent as { data: { monitors: Array<{ state: string }> } }).data.monitors;
+    expect(monitors[0]?.state).toBe('unknown');
+  } finally { await fixture.close(); }
+});
+
+it('redacts a bare monitor hostname wherever a public label repeats it', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
+    config: { published: true },
+    publicGroupList: [{ name: 'worker-internal', monitorList: [
+      { id: 7, name: 'worker-internal', url: 'http://worker-internal:8080/health' }] }],
+    incidents: [{ title: 'worker-internal unreachable', status: 'active' }],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(JSON.stringify(result)).not.toContain('worker-internal');
   } finally { await fixture.close(); }
 });
 
@@ -75,7 +110,7 @@ it('returns not_published for an explicitly unpublished page', async () => {
   } finally { await fixture.close(); }
 });
 
-// @guardrail G7.3: VPS reachability comes only from public Kuma JSON and cannot default to healthy.
+// @guardrail G7.5: VPS reachability comes only from public Kuma JSON and cannot default to healthy.
 it('returns not_published when the public status-page route is 404', async () => {
   mockServer.use(http.get(`${base}/api/status-page/demo`, () => new HttpResponse(null, { status: 404 })));
   const fixture = await harness();

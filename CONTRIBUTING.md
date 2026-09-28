@@ -8,15 +8,27 @@ Each new tool needs a Zod input schema, a validated `data` plus `examined` resul
 
 PR descriptions should state what changed, why, test evidence, touched guardrail IDs, references, and remaining work. Do not include attribution boilerplate or private operational details.
 
-While GitHub Actions is unavailable, run `scripts/local-gates.sh <full-commit-sha>`
-after pushing each new PR head. The script checks that exact commit in a fresh
-temporary worktree and posts `local/*` statuses with measured counts and the
-Node version. A non-runnable gate reports `error`, and local status is never
-described as hosted CI. Do not request a merge while the PR head differs from
-the SHA that was checked. Once Actions starts again, rerun CI on every open PR
-head and use the hosted results for merge decisions. No release tag, package
-publication, provenance, or Scorecard claim is made before the release commit
-passes hosted CI.
+While GitHub Actions is unavailable, install the reviewed local-gate controller
+and its three helper scripts into an owner-only directory outside the checkout:
+
+```sh
+install -d -m 700 ~/.config/prd-ops-lens-mcp/trusted-gates
+install -m 700 scripts/local-gates.sh ~/.config/prd-ops-lens-mcp/trusted-gates/local-gates.sh
+install -m 600 scripts/lint-fixtures.mjs scripts/private-denylist.mjs scripts/check-guardrails.mjs ~/.config/prd-ops-lens-mcp/trusted-gates/
+```
+
+Review the installer source before replacing this trusted copy. From the
+repository root, run `~/.config/prd-ops-lens-mcp/trusted-gates/local-gates.sh
+<full-commit-sha>` after pushing each new PR head. The checked-out PR code
+runs in a Docker container without GitHub credentials, host home, or the Docker
+socket; only the trusted host controller posts `local/*` statuses. The private
+fixture and denylist scans use trusted helpers outside the PR checkout. The
+controller refuses to run from inside the repository. A non-runnable gate
+reports `error`, and local status is never described as hosted CI. Do not
+request a merge while the PR head differs from the SHA that was checked. Once
+Actions starts again, rerun CI on every open PR head and use the hosted results
+for merge decisions. No release tag, package publication, provenance, or
+Scorecard claim is made before the release commit passes hosted CI.
 
 ## Definition of Ready
 

@@ -16,7 +16,8 @@ export function createServer(config: Config, providers: ProviderModule[] = []): 
   const audit = new AuditLog(config.audit.path, redactor);
   const limiter = new ProviderLimiter(config.limits.maxConcurrentProviderCalls);
   const runtime = { audit, redactor, limiter, maxOutputBytes: config.limits.maxOutputBytes,
-    providerWarnings: new Map<string, string>() };
+    providerWarnings: new Map<string, string>(),
+    evidence: new Map<string, { tool: string; result: import('./core/result.js').ToolResult }>() };
   const server = new McpServer({ name: SERVER_NAME, version: '0.1.0' });
 
   server.registerTool('server_status', {
@@ -44,11 +45,11 @@ export function createServer(config: Config, providers: ProviderModule[] = []): 
 
   server.registerTool('incident_timeline', {
     title: 'Incident timeline',
-    description: `Order cited events from supplied MCP tool results and show missing sources as unknown. ${UNTRUSTED_DATA_NOTICE}`,
+    description: `Order events from this server's audited evidence IDs and show missing sources as unknown. ${UNTRUSTED_DATA_NOTICE}`,
     inputSchema: auditedInput(timelineInput), outputSchema: ToolResultSchema,
     annotations: { readOnlyHint: true },
   }, async (parameters) => runValidatedTool(runtime, 'incident_timeline', 'local', parameters,
-    timelineInput, async (input) => incidentTimeline(input, config.limits.maxRows)));
+    timelineInput, async (input) => incidentTimeline(input, config.limits.maxRows, runtime.evidence)));
 
   registerKnowledgeResources(server, config, runtime);
   registerGuidancePrompts(server);

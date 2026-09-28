@@ -107,7 +107,7 @@ export class RestartGate {
         after = await this.api.health();
       }
       return { data: { container: input.container, host: 'local-demo',
-        beforeHealth: before, afterHealth: after, reasonRecorded: true,
+        beforeHealth: before, afterHealth: after,
         reasonLength: input.reason.length, restartedAt: afterTarget.lastStartedAt },
       examined: examined('demo-restart', 'Restart one allowlisted local demo container', {
         rowCount: 1, scannedCount: 1, warnings: after === 'healthy' ? [] :

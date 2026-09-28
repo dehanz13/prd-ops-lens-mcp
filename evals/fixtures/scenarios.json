@@ -32,16 +32,16 @@
     {
       "id": "relay-outage", "fault": "A relay is down beyond the recovery window", "marker": "relay down",
       "keySource": 0, "shapeSource": "Uptime status result: monitors with observedAt and state",
-      "sources": [{ "tool": "uptime_status", "provider": "uptime", "query": "GET public status page",
+      "sources": [{ "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
         "data": { "state": "available", "incidents": [], "monitors": [{ "name": "relay down", "state": "down", "observedAt": "2026-01-01T00:18:00.000Z" }] } }]
     },
     {
       "id": "flapping-monitor", "fault": "A monitor alternates between up and down", "marker": "edge check (down)",
       "keySource": 1, "shapeSource": "Two Uptime status results at separate observedAt times",
       "sources": [
-        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page first read",
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
           "data": { "state": "available", "incidents": [], "monitors": [{ "name": "edge check", "state": "up", "observedAt": "2026-01-01T00:20:00.000Z" }] } },
-        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page second read",
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
           "data": { "state": "available", "incidents": [], "monitors": [{ "name": "edge check", "state": "down", "observedAt": "2026-01-01T00:22:00.000Z" }] } }
       ]
     },
@@ -73,7 +73,7 @@
       "sources": [
         { "tool": "loki_logs", "provider": "grafana/loki", "query": "{job=\"demo-web\"}",
           "data": [{ "at": "2026-01-01T00:30:00.000Z", "line": "synthetic new build returns errors" }] },
-        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page",
+        { "tool": "uptime_status", "provider": "uptime", "query": "GET public status page and heartbeat for configured slug",
           "data": { "state": "available", "incidents": [], "monitors": [{ "name": "web check", "state": "down", "observedAt": "2026-01-01T00:31:00.000Z" }] } }
       ]
     }

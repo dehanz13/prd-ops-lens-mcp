@@ -11,7 +11,7 @@ it('has no Hostinger config or permissive token path', () => {
   expect(() => checkHostingerScopes(['vps:read'])).toThrow('cannot prove zero write access');
 });
 
-// @guardrail G7.2: host metrics are scraped in the demo and queried via Grafana.
+// @guardrail G7.4: host metrics are scraped in the demo and queried via Grafana.
 it('scrapes demo node metrics and uses the Grafana metric tool for proof', () => {
   const compose = readFileSync('compose.yaml', 'utf8');
   const prometheus = readFileSync('demo/prometheus/prometheus.yml', 'utf8');

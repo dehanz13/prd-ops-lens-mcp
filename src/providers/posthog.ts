@@ -121,13 +121,14 @@ export class PostHogProvider implements ProviderModule {
       throw new OpsError('UPSTREAM', 'PostHog query did not return complete rows');
     }
     const columns = value.columns as string[];
-    if (columns.length > 50 || value.results.some((row) => (row as unknown[]).length !== columns.length)) {
+    if (columns.length !== bounded.columns.length ||
+      value.results.some((row) => (row as unknown[]).length !== bounded.columns.length)) {
       throw new OpsError('UPSTREAM', 'PostHog query columns were malformed');
     }
     const rows = (value.results as unknown[][]).slice(0, bounded.limit)
-      .map((row) => row.map((cell, index) => safeCell(columns[index] ?? '', cell)));
+      .map((row) => row.map((cell, index) => safeCell(bounded.columns[index] ?? '', cell)));
     const truncated = value.results.length > rows.length || value.hasMore === true;
-    return { data: { columns, rows }, examined: examined('posthog', 'bounded HogQL events SELECT', {
+    return { data: { columns: bounded.columns, rows }, examined: examined('posthog', 'bounded HogQL events SELECT', {
       window: bounded.window, rowCount: rows.length, scannedCount: value.results.length,
       byteCount: bytes, truncated,
       warnings: truncated ? ['Additional query rows were omitted'] : [],

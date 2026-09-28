@@ -70,7 +70,7 @@ export async function parseUsageFile(path: string, config: UsageConfig): Promise
   let cacheWriteTokens = 0;
   let codexTotal: { input: number; output: number; cache: number } | null = null;
   const models = new Set<string>();
-  const seenUsage = new Set<string>();
+  const claudeUsage = new Map<string, number[]>();
   const warnings: string[] = [];
   const stream = createReadStream(path, { encoding: 'utf8', fd, autoClose: true });
   try {
@@ -120,16 +120,19 @@ export async function parseUsageFile(path: string, config: UsageConfig): Promise
         if (model) models.add(model);
         const raw = [count(usage.input_tokens), count(usage.output_tokens),
           count(usage.cache_read_input_tokens), count(usage.cache_creation_input_tokens)];
-        const fingerprint = `${at ?? 'none'}:${model ?? 'unknown'}:${raw.join(':')}`;
-        if (seenUsage.has(fingerprint)) continue;
-        seenUsage.add(fingerprint);
-        inputTokens += raw[0]! + raw[2]! + raw[3]!;
-        outputTokens += raw[1]!;
-        cacheReadTokens += raw[2]!;
-        cacheWriteTokens += raw[3]!;
+        const id = typeof message?.id === 'string' && message.id.length > 0
+          ? `id:${message.id}` : `snapshot:${at ?? 'none'}:${model ?? 'unknown'}:${raw.join(':')}`;
+        const previous = claudeUsage.get(id);
+        claudeUsage.set(id, previous ? raw.map((value, index) => Math.max(value, previous[index] ?? 0)) : raw);
       }
     }
   } finally { stream.destroy(); }
+  if (source === 'claude') for (const raw of claudeUsage.values()) {
+    inputTokens += raw[0]! + raw[2]! + raw[3]!;
+    outputTokens += raw[1]!;
+    cacheReadTokens += raw[2]!;
+    cacheWriteTokens += raw[3]!;
+  }
   if (codexTotal) {
     inputTokens = codexTotal.input;
     outputTokens = codexTotal.output;
@@ -267,14 +270,15 @@ export class AgentUsageProvider implements ProviderModule {
       .filter((job) => Date.parse(job.endedAt) >= from && Date.parse(job.endedAt) <= to)
       .sort((a, b) => b.endedAt.localeCompare(a.endedAt));
     const jobs = all.slice(0, input.limit);
-    const truncated = all.length > jobs.length;
+    const truncated = !trend && all.length > jobs.length;
     const warnings = [...new Set(files.flatMap((file) => file.warnings))];
     if (truncated) warnings.push('Agent usage result capped');
     if (!usage.priceTable) warnings.push('Estimated cost unavailable without a dated price table');
     if (jobs.some((job) => job.toolCalls === null)) warnings.push('Tool-call count unavailable for some transcript sources');
-    return { data: trend ? usageTrend(jobs, input.to) : usageReport(jobs, usage.priceTable?.asOf ?? null),
+    const data = trend ? usageTrend(all, input.to) : usageReport(jobs, usage.priceTable?.asOf ?? null);
+    return { data,
       examined: examined(this.id, 'Usage-only fields from configured local transcripts', {
-        window: { from: input.from, to: input.to }, rowCount: jobs.length,
+        window: { from: input.from, to: input.to }, rowCount: trend ? (data as ReturnType<typeof usageTrend>).weeks.length : jobs.length,
         scannedCount: files.reduce((sum, file) => sum + file.lines, 0),
         byteCount: files.reduce((sum, file) => sum + file.bytes, 0), truncated, warnings,
       }) };

@@ -8,7 +8,7 @@ import { readPrivateCredentialFile } from '../src/core/config.js';
 import { AWS_WRITE_ACTIONS, checkAwsCredential, checkGrafanaPermissions,
   checkHostingerScopes, checkPostHogScopes } from '../src/core/credential-check.js';
 import { Redactor } from '../src/core/redaction.js';
-import { examined, ToolResultSchema } from '../src/core/result.js';
+import { examined, OpsError, ToolResultSchema } from '../src/core/result.js';
 import { ProviderLimiter, runTool, UNTRUSTED_DATA_NOTICE } from '../src/core/tool.js';
 
 const redactor = new Redactor({ identityKeys: ['sessionId'], identityLabels: ['room'],
@@ -66,6 +66,18 @@ describe('foundation guardrails', () => {
       }
     }
     expect(redactor.value({ sessionId: 'private' })).toEqual({ sessionId: '[REDACTED]' });
+    const jsonLine = '{"playerId":"player-private-123","session_id":42,"event":"started"}';
+    const configured = new Redactor({ identityKeys: ['playerId', 'sessionId'],
+      identityLabels: ['player'], identityValues: [], awsIdentifiers: true });
+    const safeLine = configured.text(jsonLine);
+    expect(safeLine).not.toContain('player-private-123');
+    expect(safeLine).not.toContain('42');
+    expect(safeLine).toContain('started');
+    for (const secret of ['a1b2c3d4e5f60718293a4b5c6d7e8f90',
+      'AKIA0123456789ABCDEF', 'aws_secret_access_key=AbCd0123+/AbCd0123+/AbCd0123+/']) {
+      expect(configured.text(`log ${secret} end`)).not.toContain(secret);
+    }
+    expect(configured.text('2026-01-01 00:45:00.000')).toBe('2026-01-01 00:45:00.000');
   });
 
   // @guardrail G0.4: oversized output is replaced and its examined record is marked.
@@ -149,6 +161,29 @@ describe('foundation guardrails', () => {
     const lines = readFileSync(path, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
     expect(lines).toHaveLength(2);
     expect(lines.map((line: { outcome: string }) => line.outcome)).toEqual(['ok', 'error']);
+  });
+
+  it('audits a provider error even when its evidence details are invalid', async () => {
+    const { log, path } = audit();
+    const result = await runTool({ audit: log, redactor }, 'bad', 'local', {},
+      async () => { throw new OpsError('UPSTREAM', 'bad details', { rowCount: -1 }); });
+    expect(result.isError).toBe(true);
+    const lines = readFileSync(path, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ outcome: 'error', tool: 'bad' });
+  });
+
+  it('audits a provider result that cannot be safely encoded', async () => {
+    const { log, path } = audit();
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result = await runTool({ audit: log, redactor }, 'cyclic', 'local', {},
+      async () => ({ data: cyclic, examined: examined('local', 'cyclic') }));
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({ data: { code: 'PROVIDER_ERROR' } });
+    expect(JSON.parse(readFileSync(path, 'utf8').trim())).toMatchObject({
+      tool: 'cyclic', outcome: 'error',
+    });
   });
 });
 

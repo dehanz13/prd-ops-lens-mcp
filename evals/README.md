@@ -5,8 +5,10 @@ Version `incident-replay-v1` contains ten hand-made fault worlds in
 that should be present, and the provider result shape used. All timestamps,
 labels, and values are synthetic. No production response is recorded.
 
-`npm run evals` starts an in-memory MCP server and calls `incident_timeline`
-for every world. A case earns one evidence point only when the expected
+`npm run evals` starts an in-memory MCP server with the real Grafana, Kuma,
+CloudWatch, and PostHog provider modules. Synthetic upstream responses pass
+through their parsing and redaction code before `incident_timeline` receives
+server-issued evidence IDs. A case earns one evidence point only when the expected
 observation appears in a timeline event with a citation to the source tool's
 exact query and UTC window. The runner then removes the key observation and
 replays the same call. That positive control passes only when the evidence

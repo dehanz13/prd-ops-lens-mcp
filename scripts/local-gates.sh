@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reproduce the repository's CI commands at a committed SHA while Actions is unavailable.
+# Install this reviewed controller outside the repository before running it.
+# The checkout under test is untrusted and never receives host credentials.
 repo=dehanz13/prd-ops-lens-mcp
-root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
+root=$(git rev-parse --show-toplevel) || exit 2
+runner=$(realpath "${BASH_SOURCE[0]}")
+trusted_dir=$(dirname "$runner")
+if [[ $runner == "$root"/* ]]; then
+  printf 'Refusing a runner from the repository checkout. Install the reviewed runner and helpers outside the repo.\n' >&2
+  exit 2
+fi
+for file in "$runner" "$trusted_dir/lint-fixtures.mjs" "$trusted_dir/private-denylist.mjs" \
+  "$trusted_dir/check-guardrails.mjs"; do
+  if [[ ! -f $file || -L $file ]] || [[ $(stat -f '%u %Lp' "$file") != "$(id -u) "[0-7]00 ]]; then
+    printf 'Trusted runner files must be owner-only regular files.\n' >&2
+    exit 2
+  fi
+done
 sha=${1:-}
 if [[ ! $sha =~ ^[a-f0-9]{40}$ ]] || ! git -C "$root" cat-file -e "$sha^{commit}" 2>/dev/null; then
   printf 'Pass a reachable full 40-character commit SHA.\n' >&2
@@ -35,7 +49,14 @@ post() {
     --jq '.id' >/dev/null
 }
 
-node_version=$(node --version 2>/dev/null || printf 'unavailable')
+if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
+  post setup error 'self-run, node unavailable; local Docker isolation unavailable' || exit 2
+  printf 'Local Docker isolation is required before gate execution.\n' >&2
+  exit 2
+fi
+
+container_image=node@sha256:363e1587494626837fa7f9a23bdb453d13b0ff3c67c705c2805cfc69c2d2fad7
+node_version=$(docker run --rm --network none "$container_image" node --version 2>/dev/null || printf 'unavailable')
 node_major=${node_version#v}
 node_major=${node_major%%.*}
 if [[ ! $node_major =~ ^[0-9]+$ ]] || (( node_major < 22 )); then
@@ -49,6 +70,15 @@ if ! git -C "$root" worktree add --detach "$checkout" "$sha" >"$scratch/worktree
 fi
 cd "$checkout" || exit 2
 
+container() {
+  local network=$1
+  shift
+  docker run --rm --network "$network" --cap-drop ALL --security-opt no-new-privileges \
+    --read-only --tmpfs /tmp:rw,nosuid,size=256m --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache \
+    -v "$checkout:/work" -v "$scratch:/results" -w /work "$container_image" "$@"
+}
+
 failed=0
 setup_ok=1
 summary_for() {
@@ -58,7 +88,8 @@ summary_for() {
   node -e '
     const fs = require("node:fs");
     const [name, path] = process.argv.slice(1);
-    const log = fs.readFileSync(name === "sbom" ? path.replace(/sbom\.log$/, "sbom.json") : path, "utf8");
+    const log = fs.readFileSync(name === "sbom" ? path.replace(/sbom\.log$/, "sbom.json") : path, "utf8")
+      .replace(/\u001b\[[0-9;]*m/g, "");
     const match = (pattern) => {
       const found = log.match(pattern);
       if (!found) process.exit(1);
@@ -102,10 +133,7 @@ gate() {
     failed=1
     return 0
   fi
-  if ! command -v "$1" >/dev/null 2>&1; then
-    post "$name" error "self-run, node $node_version; command unavailable" || return 2
-    failed=1
-  elif "$@" >"$scratch/$name.log" 2>&1; then
+  if container none "$@" >"$scratch/$name.log" 2>&1; then
     local summary
     if ! summary=$(summary_for "$name"); then
       post "$name" error "self-run, node $node_version; result count unavailable" || return 2
@@ -116,33 +144,91 @@ gate() {
     printf '%s: success (%s)\n' "$name" "$summary"
   else
     local exit_code=$?
-    post "$name" failure "self-run, node $node_version; exit $exit_code" || return 2
+    local state=failure
+    if (( exit_code >= 125 && exit_code <= 127 )); then state=error; fi
+    post "$name" "$state" "self-run, node $node_version; exit $exit_code" || return 2
     printf '%s: failure at %s\n' "$name" "$sha" >&2
     failed=1
   fi
 }
 
-if npm ci --ignore-scripts >"$scratch/npm-ci.log" 2>&1; then
-  post npm-ci success "self-run, node $node_version; clean install completed" || exit 2
+network_gate() {
+  local name=$1
+  shift
+  if (( ! setup_ok )); then
+    post "$name" error "self-run, node $node_version; npm ci did not complete" || return 2
+    failed=1
+    return 0
+  fi
+  if container bridge "$@" >"$scratch/$name.log" 2>&1; then
+    local summary
+    if ! summary=$(summary_for "$name"); then
+      post "$name" error "self-run, node $node_version; result count unavailable" || return 2
+      failed=1
+      return 0
+    fi
+    post "$name" success "self-run, node $node_version; $summary" || return 2
+    printf '%s: success (%s)\n' "$name" "$summary"
+  else
+    local exit_code=$?
+    local state=failure
+    if (( exit_code >= 125 && exit_code <= 127 )); then state=error; fi
+    post "$name" "$state" "self-run, node $node_version; exit $exit_code" || return 2
+    failed=1
+  fi
+}
+
+host_gate() {
+  local name=$1
+  shift
+  if "$@" >"$scratch/$name.log" 2>&1; then
+    local summary
+    if ! summary=$(summary_for "$name"); then
+      post "$name" error "self-run, node $node_version; result count unavailable" || return 2
+      failed=1
+      return 0
+    fi
+    post "$name" success "self-run, node $node_version; $summary" || return 2
+    printf '%s: success (%s)\n' "$name" "$summary"
+  else
+    local exit_code=$?
+    local state=failure
+    if (( exit_code == 127 )); then state=error; fi
+    post "$name" "$state" "self-run, node $node_version; exit $exit_code" || return 2
+    failed=1
+  fi
+}
+
+if container bridge npm ci --ignore-scripts >"$scratch/npm-ci.log" 2>&1; then
+  installed=$(rg -o 'added [0-9]+ packages' "$scratch/npm-ci.log" | tail -1 || true)
+  if [[ -z $installed ]]; then
+    post npm-ci error "self-run, node $node_version; install count unavailable" || exit 2
+    setup_ok=0
+    failed=1
+  else
+    post npm-ci success "self-run, node $node_version; $installed" || exit 2
+  fi
 else
   exit_code=$?
-  post npm-ci failure "self-run, node $node_version; npm ci exit $exit_code" || exit 2
+  state=failure
+  if (( exit_code >= 125 && exit_code <= 127 )); then state=error; fi
+  post npm-ci "$state" "self-run, node $node_version; npm ci exit $exit_code" || exit 2
   setup_ok=0
   failed=1
 fi
 
-gate lint npm run lint
-gate typecheck npm run typecheck
-gate tests npm test
-gate evals npm run evals
-gate fixtures npm run fixtures:lint -- --require-private
-gate guardrails npm run guardrails
-gate build npm run build
-gate audit npm audit --omit=dev
+gate lint ./node_modules/.bin/eslint .
+gate typecheck ./node_modules/.bin/tsc --noEmit
+gate tests ./node_modules/.bin/vitest run --coverage
+gate evals node --import tsx evals/run.ts
+host_gate fixtures node "$trusted_dir/lint-fixtures.mjs" --require-private
+host_gate guardrails node "$trusted_dir/check-guardrails.mjs"
+gate build ./node_modules/.bin/tsc -p tsconfig.build.json
+network_gate audit npm audit --omit=dev
 # The child shell receives the output path as its first positional argument.
 # shellcheck disable=SC2016
-gate sbom bash -c 'npm sbom --package-lock-only --sbom-format cyclonedx > "$1"' _ "$scratch/sbom.json"
-gate gitleaks gitleaks git . --no-banner --redact
+gate sbom bash -c 'npm sbom --package-lock-only --sbom-format cyclonedx > /results/sbom.json'
+host_gate gitleaks gitleaks git . --no-banner --redact
 
 base=$(git merge-base origin/develop "$sha" 2>/dev/null || true)
 if [[ -z $base ]]; then
@@ -150,7 +236,7 @@ if [[ -z $base ]]; then
   failed=1
 else
   if printf 'refs/heads/local %s refs/heads/develop %s\n' "$sha" "$base" |
-    node scripts/private-denylist.mjs >"$scratch/denylist.log" 2>&1; then
+    node "$trusted_dir/private-denylist.mjs" >"$scratch/denylist.log" 2>&1; then
     post denylist success "self-run, node $node_version; 0 private-term matches" || exit 2
     printf 'denylist: success (0 private-term matches)\n'
   else

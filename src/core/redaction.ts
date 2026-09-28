@@ -1,16 +1,18 @@
 import type { Config } from './config.js';
 
-const fixedSensitiveKeys = /^(?:authorization|cookie|password|secret|token|api[_-]?key|access[_-]?key|email|ip|url)$/i;
+const sensitiveKeyNames = 'authorization|cookie|password|secret|token|api[_-]?key|access[_-]?key|aws_secret_access_key|aws_access_key_id|user[_-]?id|player[_-]?id|session[_-]?id|account[_-]?id|email|ip|url';
+const fixedSensitiveKeys = new RegExp(`^(?:${sensitiveKeyNames})$`, 'i');
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const ipv4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
-const ipv6 = /(?<![\w:])(?:[a-f\d]{0,4}:){2,7}[a-f\d]{0,4}(?![\w:])/gi;
+const ipv6 = /(?<![\w:])(?!(?:\d{2}:){2}\d{2}(?:[.\s]|$))(?:[a-f\d]{0,4}:){2,7}[a-f\d]{0,4}(?![\w:])/gi;
 const bearer = /\bBearer\s+[^\s,;]+/gi;
-const tokenAssignment = /\b((?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*)[^\s,;]+/gi;
+const tokenAssignment = /\b((?:api[_-]?key|token|secret|password|authorization|aws_secret_access_key|aws_access_key_id)\s*[:=]\s*)[^\s,;]+/gi;
 const jwt = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
-const cloudKey = /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g;
+const cloudKey = /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gi;
+const hexSecret = /\b[A-F0-9]{32,}\b/gi;
 const awsArn = /\barn:[a-z0-9-]+:[a-z0-9-]*:[a-z0-9-]*:\d{12}:[^\s,;"']+/gi;
 const awsAccountId = /\b\d{12}\b/g;
-const prefixedToken = /\b(?:sk-|phx_|glsa_)[A-Za-z0-9_-]{8,}\b/gi;
+const prefixedToken = /\b(?:sk-|phx_|glsa_|ghp_|gho_|github_pat_|xoxb-)[A-Za-z0-9_-]{8,}\b/gi;
 const longToken = /\b[A-Za-z0-9_-]{32,}\b/g;
 // Deliberate control-character matching protects the MCP transport from terminal escapes.
 // eslint-disable-next-line no-control-regex
@@ -22,6 +24,7 @@ export class Redactor {
   private readonly awsIdentifiers: boolean;
   private readonly identityKeys: Set<string>;
   private readonly identityPattern: RegExp | null;
+  private readonly jsonSensitivePattern: RegExp;
   private readonly identityValues: string[];
 
   constructor(config: Config['redaction']) {
@@ -32,16 +35,21 @@ export class Redactor {
     this.identityPattern = labels.length
       ? new RegExp(`\\b((?:${labels.join('|')})[:=/])[^\\s:,;/]+`, 'gi')
       : null;
+    const jsonKeys = [...this.identityKeys].map(escapeRegExp);
+    this.jsonSensitivePattern = new RegExp(
+      `"(?:${[sensitiveKeyNames, ...jsonKeys].join('|')})"\\s*:\\s*(?:"(?:\\\\.|[^"\\\\])*"|-?\\d+(?:\\.\\d+)?|true|false|null)`, 'gi');
   }
 
   text(value: string): string {
     let result = value
       .replace(ansi, '')
       .replace(control, '')
+      .replace(this.jsonSensitivePattern, (field) => `${field.slice(0, field.indexOf(':') + 1)}"[REDACTED]"`)
       .replace(bearer, 'Bearer [REDACTED]')
       .replace(tokenAssignment, '$1[REDACTED]')
       .replace(jwt, '[REDACTED]')
       .replace(cloudKey, '[REDACTED]')
+      .replace(hexSecret, '[REDACTED]')
       .replace(prefixedToken, '[REDACTED]')
       .replace(email, '[REDACTED]')
       .replace(ipv4, '[REDACTED]')

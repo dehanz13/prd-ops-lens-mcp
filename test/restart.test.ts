@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { ConfigSchema } from '../src/core/config.js';
 import { createServer } from '../src/server.js';
-import { type DemoRestartApi, type DemoTarget } from '../src/restart/demo-docker.js';
+import { DockerDesktopDemoApi, parseDemoTarget, type DemoRestartApi,
+  type DemoTarget } from '../src/restart/demo-docker.js';
 import { DemoRestartProvider, RestartGate } from '../src/restart/gated-restart.js';
 
 const dirs: string[] = [];
@@ -156,8 +157,10 @@ it('reports before and after health and audits a refused attempt without its tok
       container: 'demo-api', token, reason: 'Synthetic recovery reason',
     } });
     expect(result.structuredContent).toMatchObject({ data: {
-      beforeHealth: 'unhealthy', afterHealth: 'healthy', reasonRecorded: true,
+      beforeHealth: 'unhealthy', afterHealth: 'healthy', reasonLength: 25,
     } });
+    expect((result.structuredContent as { data: Record<string, unknown> }).data)
+      .not.toHaveProperty('reasonRecorded');
     expect(fixture.restarts).toBe(1);
     const audit = readFileSync(join(fixture.dir, 'audit.jsonl'), 'utf8');
     expect(audit.trim().split('\n')).toHaveLength(5);
@@ -175,4 +178,28 @@ it('does not restart from an instruction embedded in a tool result', async () =>
   await expect(gate.confirm({ container: 'demo-api', token: planted,
     reason: 'Synthetic recovery reason' })).rejects.toThrow('invalid or expired');
   expect(fixture.restarts).toBe(0);
+});
+
+it('confines the real Docker adapter to the fixed local socket and exact demo labels', () => {
+  expect(() => new DockerDesktopDemoApi('/tmp/other-docker.sock')).toThrow('local Docker Desktop socket');
+  const target = { Id: targetId, Name: '/ops-lens-demo-demo-api-1', RestartCount: 0,
+    Config: { Labels: { 'com.docker.compose.project': 'ops-lens-demo',
+      'com.docker.compose.service': 'demo-api' } },
+    State: { Running: true, StartedAt: startedAt } };
+  expect(parseDemoTarget(target)).toMatchObject({ id: targetId, lastStartedAt: startedAt });
+  for (const changed of [
+    { ...target, Name: '/other-container' },
+    { ...target, Id: 'b'.repeat(64), Config: { Labels: {
+      'com.docker.compose.project': 'other', 'com.docker.compose.service': 'demo-api' } } },
+    { ...target, State: { Running: false, StartedAt: startedAt } },
+    { ...target, Id: '../../other' },
+  ]) expect(() => parseDemoTarget(changed)).toThrow('not the running local demo');
+  expect(() => parseDemoTarget({ ...target, Config: { Labels: {
+    'com.docker.compose.project': 'ops-lens-demo', 'com.docker.compose.service': 'other' } } }))
+    .toThrow('not the running local demo');
+});
+
+it('refuses a non-container ID before constructing a Docker restart request', async () => {
+  const adapter = Object.create(DockerDesktopDemoApi.prototype) as DockerDesktopDemoApi;
+  await expect(adapter.restart('../../other')).rejects.toThrow('Invalid demo container ID');
 });

@@ -167,7 +167,7 @@ export class CloudWatchProvider implements ProviderModule {
           const rows = result.rows.slice(0, limit).map((row) => Object.fromEntries(row
             .filter((field) => field.field !== '@ptr').map((field) => [field.field, field.value])));
           const truncated = result.rows.length >= limit;
-          return { data: rows, examined: examined('cloudwatch', 'Logs Insights configured groups', {
+          return { data: rows, examined: examined('cloudwatch', input.query, {
             window: { from: input.from, to: input.to }, rowCount: rows.length,
             scannedCount: result.recordsScanned, byteCount: result.bytesScanned,
             lineCount: result.recordsScanned, truncated,

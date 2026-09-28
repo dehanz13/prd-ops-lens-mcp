@@ -104,7 +104,11 @@ describe('IAM read boundary', () => {
   it('returns only trust shape and hides condition values', async () => {
     const summary = summarizeTrust(trustDocument);
     expect(summary).toEqual({ statements: [{ effect: 'Allow', principalTypes: ['AWS'],
-      hasCondition: true, externalIdRequired: true }], truncated: false });
+      broadPrincipal: false, hasCondition: true, externalIdRequired: true }], truncated: false });
+    expect(summarizeTrust(JSON.stringify({ Statement: { Effect: 'Allow',
+      Principal: { AWS: '*' } } })).statements[0]).toMatchObject({
+      principalTypes: ['AWS'], broadPrincipal: true, hasCondition: false,
+    });
     expect(summarizePolicy(policyDocument)).toEqual({ statementCount: 2, denyStatementCount: 1 });
     const api = new FakeIam();
     api.rolesResult.push({ name: 'not-configured', arn: roleArn, trustDocument });

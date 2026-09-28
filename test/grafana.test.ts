@@ -1,5 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -129,6 +129,22 @@ describe('Grafana tools', () => {
     } finally { await fixture.close(); }
   });
 
+  it('refuses a range whose requested points exceed the configured row cap', async () => {
+    let contacted = false;
+    mockServer.use(http.post(`${base}/api/ds/query`, () => {
+      contacted = true;
+      return HttpResponse.json(prometheusMatrixFixture.response);
+    }));
+    const fixture = await harness({ maxRows: 10 });
+    try {
+      const result = await fixture.client.callTool({ name: 'prometheus_range', arguments: {
+        query: 'up', from, to, stepSeconds: 60,
+      } });
+      expect(result.structuredContent).toMatchObject({ data: { code: 'QUERY_LIMIT' } });
+      expect(contacted).toBe(false);
+    } finally { await fixture.close(); }
+  });
+
   it('caps Prometheus output at 200 series and refuses excessive expressions', async () => {
     const frame = prometheusVectorFixture.response.results.A.frames[0];
     mockServer.use(http.post(`${base}/api/ds/query`, () => HttpResponse.json({
@@ -231,6 +247,16 @@ describe('bounded HTTP transport', () => {
     const client = new BoundedHttpClient(base, undefined, 1000, 1024, 'test',
       [{ method: 'GET', path: '/denied' }]);
     await expect(client.get('/denied')).rejects.toMatchObject({ code: 'PERMISSION' });
+  });
+
+  it('aborts a provider response beyond its configured time budget', async () => {
+    mockServer.use(http.get(`${base}/slow`, async () => {
+      await delay(100);
+      return HttpResponse.json({ healthy: true });
+    }));
+    const client = new BoundedHttpClient(base, undefined, 10, 1024, 'test',
+      [{ method: 'GET', path: '/slow' }]);
+    await expect(client.get('/slow')).rejects.toMatchObject({ code: 'NETWORK' });
   });
 
   // @guardrail G0.1: a write route is blocked before fetch is called.

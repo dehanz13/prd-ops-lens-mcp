@@ -13,8 +13,8 @@ it('keeps ten documented synthetic worlds and detects planted fixture violations
   expect(suite.cases.every((scenario) => scenario.keySource < scenario.sources.length &&
     scenario.shapeSource.length > 0)).toBe(true);
   expect(lintFixtureText('synthetic@example.test')).toContain('email');
-  expect(lintFixtureText('203.0.114.1')).toContain('non-documentation IPv4');
-  expect(lintFixtureText('2001:4860::1')).toContain('non-documentation IPv6');
+  expect(lintFixtureText('198.18.0.1')).toContain('non-documentation IPv4');
+  expect(lintFixtureText('fc00::1')).toContain('non-documentation IPv6');
   expect(lintFixtureText('Bearer synthetic-credential')).toContain('credential-like value');
   expect(lintFixtureText('quiet-private-marker', ['quiet-private-marker'])).toContain('private term');
   expect(lintFixtureText('192.0.2.1 and 2001:db8::1')).toEqual([]);
@@ -26,7 +26,7 @@ it('reports evidence and positive-control scores from the MCP replay runner', ()
     { encoding: 'utf8' });
   const report = JSON.parse(output.trim().split('\n').at(-1)!) as Record<string, unknown>;
   expect(report).toMatchObject({ suite: 'incident-replay-v1', scenarios: 10,
-    evidencePassed: 10, positiveControlsPassed: 10, modelScored: false });
+    evidencePassed: 10, positiveControlsPassed: 10, providerParsed: true, modelScored: false });
   const readme = readFileSync('README.md', 'utf8');
   expect(readme).toContain('10/10 evidence checks');
   expect(readme).toContain('10/10 positive controls');

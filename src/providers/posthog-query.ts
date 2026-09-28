@@ -6,6 +6,7 @@ type Word = { value: string; start: number; end: number };
 function words(query: string): Word[] {
   const found: Word[] = [];
   let quote: string | undefined;
+  let depth = 0;
   for (let index = 0; index < query.length;) {
     const char = query[index];
     if (quote) {
@@ -18,6 +19,13 @@ function words(query: string): Word[] {
       throw new OpsError('REFUSED', 'HogQL quoted identifiers are not allowed');
     }
     if (char === '\'') { quote = char; index++; continue; }
+    if (char === '(') depth++;
+    if (char === ')' && --depth < 0) {
+      throw new OpsError('REFUSED', 'HogQL parentheses are unbalanced');
+    }
+    if (char === '[' || char === ']' || char === '{' || char === '}' || char === '\\') {
+      throw new OpsError('REFUSED', 'HogQL nested data and escapes are not allowed');
+    }
     if (char === ';' || char === '#' || query.slice(index, index + 2) === '--' ||
       query.slice(index, index + 2) === '/*') {
       throw new OpsError('REFUSED', 'HogQL comments or multiple statements are not allowed');
@@ -31,11 +39,26 @@ function words(query: string): Word[] {
     index++;
   }
   if (quote) throw new OpsError('REFUSED', 'HogQL has an unterminated quoted value');
+  if (depth !== 0) throw new OpsError('REFUSED', 'HogQL parentheses are unbalanced');
   return found;
 }
 
+function safeProjection(projection: string): string[] {
+  const columns = projection.split(',').map((part) => part.trim().toLowerCase());
+  if (columns.length < 1 || columns.length > 3 || columns.some((part) =>
+    !/^(?:event|timestamp|count\s*\(\s*\*\s*\))$/.test(part))) {
+    throw new OpsError('REFUSED', 'HogQL projection must use event, timestamp, or count(*) without aliases');
+  }
+  const canonical = columns.map((part) => part.startsWith('count') ? 'count' : part);
+  if (new Set(canonical).size !== canonical.length) {
+    throw new OpsError('REFUSED', 'HogQL projection has duplicate columns');
+  }
+  return canonical;
+}
+
 export function boundedHogql(query: string, from: string, to: string, maximumRows: number,
-  maximumMinutes: number): { query: string; limit: number; window: { from: string; to: string } } {
+  maximumMinutes: number): { query: string; columns: string[]; limit: number;
+    window: { from: string; to: string } } {
   if (query.length > 4000 || !/(?:Z|[+-]\d{2}:\d{2})$/.test(from) ||
     !/(?:Z|[+-]\d{2}:\d{2})$/.test(to)) {
     throw new OpsError('QUERY_LIMIT', 'HogQL or UTC window is invalid');
@@ -61,15 +84,28 @@ export function boundedHogql(query: string, from: string, to: string, maximumRow
   }
   const fromEnd = tokens[source + 1]?.end ?? 0;
   const projection = query.slice(tokens[0]?.end ?? 0, tokens[source]?.start ?? 0);
-  if (projection.replace(/count\s*\(\s*\*\s*\)/gi, '').includes('*')) {
-    throw new OpsError('REFUSED', 'HogQL may not return all event columns');
-  }
+  const columns = safeProjection(projection);
   const firstClause = tokens.find((word, index) => index > source + 1 &&
     ['where', 'group', 'order', 'limit'].includes(word.value));
   if (query.slice(fromEnd, firstClause?.start ?? query.length).trim()) {
     throw new OpsError('REFUSED', 'HogQL table aliases and extra sources are not allowed');
   }
   const limitWord = tokens.find((word) => word.value === 'limit');
+  const groupWord = tokens.find((word) => word.value === 'group');
+  const orderWord = tokens.find((word) => word.value === 'order');
+  if (groupWord) {
+    const clause = query.slice(groupWord.end, orderWord?.start ?? limitWord?.start ?? query.length).trim();
+    if (!/^by\s+(?:event|timestamp)$/i.test(clause) ||
+      (orderWord !== undefined && orderWord.start < groupWord.start)) {
+      throw new OpsError('REFUSED', 'HogQL GROUP BY accepts only event or timestamp');
+    }
+  }
+  if (orderWord) {
+    const clause = query.slice(orderWord.end, limitWord?.start ?? query.length).trim();
+    if (!/^by\s+(?:event|timestamp|count\s*\(\s*\*\s*\))(?:\s+(?:asc|desc))?$/i.test(clause)) {
+      throw new OpsError('REFUSED', 'HogQL ORDER BY accepts only a safe projected field');
+    }
+  }
   const requestedLimit = limitWord ? Number(query.slice(limitWord.end).trim()) : maximumRows;
   if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 1000 ||
     requestedLimit > maximumRows) {
@@ -84,10 +120,16 @@ export function boundedHogql(query: string, from: string, to: string, maximumRow
   const whereWord = tokens.find((word) => word.value === 'where');
   const condition = whereWord ? query.slice(whereWord.end, insertion).trim() : '';
   if (whereWord && !condition) throw new OpsError('REFUSED', 'HogQL WHERE is empty');
+  if (whereWord) {
+    const allowed = new Set(['event', 'timestamp', 'and', 'or', 'not', 'in', 'like', 'is', 'null']);
+    if (words(condition).some((word) => !allowed.has(word.value))) {
+      throw new OpsError('REFUSED', 'HogQL WHERE can filter only event or timestamp');
+    }
+  }
   const windowed = whereWord
     ? `${query.slice(0, whereWord.end)} (${condition}) AND ${window}`
     : `${prefix} WHERE ${window}`;
   const bounded = `${windowed}${suffix ? ` ${suffix}` : ''}`;
-  return { query: limitWord ? bounded : `${bounded} LIMIT ${requestedLimit}`,
+  return { query: limitWord ? bounded : `${bounded} LIMIT ${requestedLimit}`, columns,
     limit: requestedLimit, window: { from: new Date(start).toISOString(), to: new Date(end).toISOString() } };
 }

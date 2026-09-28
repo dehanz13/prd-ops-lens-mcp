@@ -5,6 +5,7 @@ import { GetRoleCommand, IAMClient, SimulatePrincipalPolicyCommand } from '@aws-
 import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
 import { readPrivateCredentialFile, type Config } from '../core/config.js';
 import { OpsError } from '../core/result.js';
+import { installAwsReadGuard } from './aws-read-guard.js';
 
 type CloudWatchConfig = NonNullable<Config['providers']['cloudwatch']>;
 
@@ -76,10 +77,10 @@ export class SdkCloudWatchReadApi implements CloudWatchReadApi {
   constructor(private readonly config: CloudWatchConfig, private readonly timeoutMs: number) {
     const credentials = readIsolatedAwsProfile(config.credentialsFile, config.profile);
     const options = { region: config.region, credentials, maxAttempts: 1 };
-    this.metricClient = new CloudWatchClient(options);
-    this.logsClient = new CloudWatchLogsClient(options);
-    this.iamClient = new IAMClient(options);
-    this.stsClient = new STSClient(options);
+    this.metricClient = installAwsReadGuard(new CloudWatchClient(options));
+    this.logsClient = installAwsReadGuard(new CloudWatchLogsClient(options));
+    this.iamClient = installAwsReadGuard(new IAMClient(options));
+    this.stsClient = installAwsReadGuard(new STSClient(options));
   }
 
   private signal(timeoutMs = this.timeoutMs): AbortSignal {

@@ -5,6 +5,7 @@ import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
 import type { Config } from '../core/config.js';
 import { OpsError } from '../core/result.js';
 import { readIsolatedAwsProfile } from './aws-cloudwatch-api.js';
+import { installAwsReadGuard } from './aws-read-guard.js';
 
 type IamConfig = NonNullable<Config['providers']['iam']>;
 
@@ -32,9 +33,9 @@ export class SdkIamReadApi implements IamReadApi {
   constructor(config: IamConfig, private readonly timeoutMs: number) {
     const credentials = readIsolatedAwsProfile(config.credentialsFile, config.profile);
     const options = { region: config.region, credentials, maxAttempts: 1 };
-    this.iam = new IAMClient(options);
-    this.sts = new STSClient(options);
-    this.analyzer = new AccessAnalyzerClient(options);
+    this.iam = installAwsReadGuard(new IAMClient(options));
+    this.sts = installAwsReadGuard(new STSClient(options));
+    this.analyzer = installAwsReadGuard(new AccessAnalyzerClient(options));
   }
 
   private signal(): AbortSignal { return AbortSignal.timeout(this.timeoutMs); }

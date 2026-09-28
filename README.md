@@ -65,7 +65,7 @@ only the page's public JSON. If no page is published yet, the tool returns
 | `posthog_hogql`, `posthog_insight`, `posthog_error_issues`, `posthog_flag` | Implemented locally | Bounded event queries and safe insight, issue, and flag summaries |
 | Host health | Demo query available | `node_*` through Grafana; live exporter deployment is pending |
 | Hostinger | Excluded from v1 | Personal tokens cannot prove zero write access |
-| `incident_timeline` | Implemented locally | Orders events from supplied tool results, cites each `examined` block, and marks absent expected sources unknown |
+| `incident_timeline` | Implemented locally | Orders events from this server's audited evidence IDs, cites each `examined` block, and marks absent expected sources unknown |
 | `agent_usage_report`, `agent_usage_trend` | Implemented locally | Numeric usage fields from explicitly configured owner-only Codex and Claude transcript files; safe job labels, estimates, and weekly benchmarks |
 | `plan_restart`, `restart_container` | Implemented for the local Docker Desktop demo only | Exact allowlist, two-minute single-use confirmation, kill and deploy locks, cooldown, before and after health, and audit |
 
@@ -79,7 +79,7 @@ Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime
 
 Host and container health use the existing Grafana metric path. The [host-health query guide](docs/permissions/host-health.md) shows bounded `node_*` and `container_*` expressions and the evidence needed before calling a live exporter available. The MCP never loads a Hostinger token. The separate public Kuma JSON provides reachability; it does not infer host resource health.
 
-The [incident timeline contract](docs/incident-timeline.md) describes how to pass prior structured tool results into `incident_timeline`. It never queries a provider again or treats client-supplied citations as independently verified. Optional system-map and runbook resources are read only from explicitly configured owner-only files. Triage, postmortem, and maintenance prompts carry the untrusted-data instruction and request read-only evidence.
+The [incident timeline contract](docs/incident-timeline.md) describes how to pass server-issued evidence IDs into `incident_timeline`. It never queries a provider again and refuses caller-supplied result bodies. Optional system-map and runbook resources are read only from explicitly configured owner-only files. Triage, postmortem, and maintenance prompts carry the untrusted-data instruction and request read-only evidence.
 
 The [agent usage guide](docs/agent-usage.md) explains the allowlisted local transcript parser, safe job labels, dated price tables, and privacy requirements for optional OpenTelemetry and PostHog exports. The MCP does not send usage events or load an Anthropic Admin API key.
 

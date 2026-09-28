@@ -15,10 +15,11 @@ export const ExaminedSchema = z.strictObject({
 export const ToolResultSchema = z.strictObject({
   data: z.unknown(),
   examined: ExaminedSchema,
+  evidenceId: z.uuid().optional(),
 });
 
 export type Examined = z.output<typeof ExaminedSchema>;
-export type ToolResult<T = unknown> = { data: T; examined: Examined };
+export type ToolResult<T = unknown> = { data: T; examined: Examined; evidenceId?: string | undefined };
 
 export function examined(provider: string, query: string, overrides: Partial<Examined> = {}): Examined {
   const now = new Date().toISOString();

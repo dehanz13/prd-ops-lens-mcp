@@ -46,6 +46,7 @@ export const ConfigSchema = z.strictObject({
       enabled: z.boolean().default(false),
       baseUrl,
       slug: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+      maxHeartbeatAgeSeconds: z.number().int().min(60).max(86_400).default(600),
     }).optional(),
     cloudwatch: z.strictObject({
       enabled: z.boolean().default(false),

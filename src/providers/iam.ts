@@ -50,6 +50,10 @@ export function summarizeTrust(document: string) {
       : principal && typeof principal === 'object' && !Array.isArray(principal)
         ? Object.keys(principal).filter((key) => ['AWS', 'Service', 'Federated', 'CanonicalUser'].includes(key)).sort()
         : [];
+    const awsPrincipal = principal && typeof principal === 'object' && !Array.isArray(principal)
+      ? (principal as Record<string, unknown>).AWS : undefined;
+    const broadPrincipal = principal === '*' || awsPrincipal === '*' ||
+      (Array.isArray(awsPrincipal) && awsPrincipal.includes('*'));
     const condition = statement.Condition;
     const hasCondition = Boolean(condition && typeof condition === 'object' && !Array.isArray(condition)
       && Object.keys(condition).length);
@@ -58,6 +62,7 @@ export function summarizeTrust(document: string) {
         clause && typeof clause === 'object' && !Array.isArray(clause) &&
         Object.keys(clause).some((key) => key.toLowerCase() === 'sts:externalid'));
     return { effect: statement.Effect === 'Allow' ? 'Allow' : 'Deny', principalTypes,
+      broadPrincipal: statement.Effect === 'Allow' && broadPrincipal,
       hasCondition, externalIdRequired };
   });
   return { statements: rows, truncated: all.length > 20 };

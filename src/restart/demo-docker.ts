@@ -19,6 +19,26 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/** Validate the daemon payload before a restart ID can reach the POST route. */
+export function parseDemoTarget(value: unknown): DemoTarget {
+  const result = object(value);
+  const config = object(result.Config);
+  const labels = object(config.Labels);
+  const state = object(result.State);
+  if (result.Name !== '/ops-lens-demo-demo-api-1' ||
+    labels['com.docker.compose.project'] !== 'ops-lens-demo' ||
+    labels['com.docker.compose.service'] !== 'demo-api' ||
+    state.Running !== true || typeof result.Id !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(result.Id)) {
+    throw new OpsError('REFUSED', 'Target is not the running local demo API container');
+  }
+  return { id: result.Id,
+    lastStartedAt: typeof state.StartedAt === 'string' && Number.isFinite(Date.parse(state.StartedAt))
+      ? new Date(state.StartedAt).toISOString() : null,
+    restartCount: typeof result.RestartCount === 'number' && Number.isSafeInteger(result.RestartCount)
+      ? result.RestartCount : 0 };
+}
+
 /** A fixed Docker Desktop socket and fixed demo API paths; no CLI or remote host. */
 export class DockerDesktopDemoApi implements DemoRestartApi {
   constructor(private readonly socket: string) {
@@ -67,22 +87,7 @@ export class DockerDesktopDemoApi implements DemoRestartApi {
   }
 
   async inspect(): Promise<DemoTarget> {
-    const result = object(await this.call('GET', '/containers/ops-lens-demo-demo-api-1/json'));
-    const config = object(result.Config);
-    const labels = object(config.Labels);
-    const state = object(result.State);
-    if (result.Name !== '/ops-lens-demo-demo-api-1' ||
-      labels['com.docker.compose.project'] !== 'ops-lens-demo' ||
-      labels['com.docker.compose.service'] !== 'demo-api' ||
-      state.Running !== true || typeof result.Id !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(result.Id)) {
-      throw new OpsError('REFUSED', 'Target is not the running local demo API container');
-    }
-    return { id: result.Id,
-      lastStartedAt: typeof state.StartedAt === 'string' && Number.isFinite(Date.parse(state.StartedAt))
-        ? new Date(state.StartedAt).toISOString() : null,
-      restartCount: typeof result.RestartCount === 'number' && Number.isSafeInteger(result.RestartCount)
-        ? result.RestartCount : 0 };
+    return parseDemoTarget(await this.call('GET', '/containers/ops-lens-demo-demo-api-1/json'));
   }
 
   async health(): Promise<'healthy' | 'unhealthy' | 'unknown'> {

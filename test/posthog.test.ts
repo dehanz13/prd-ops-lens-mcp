@@ -25,8 +25,8 @@ beforeEach(() => mock.use(
     expect(body.query.kind).toBe('HogQLQuery');
     expect(body.query.query).toContain('timestamp >= toDateTime');
     expect(body.query.query).toContain('LIMIT 10');
-    return HttpResponse.json({ columns: ['event', 'count', 'email'],
-      results: [['demo_event', 3, 'person@example.invalid']], hasMore: false });
+    return HttpResponse.json({ columns: ['event', 'count'],
+      results: [['demo_event', 3]], hasMore: false });
   }),
   http.get(`${base}/api/projects/123/insights/7/`, () => HttpResponse.json({
     id: 7, short_id: 'synthetic', insight: 'TRENDS', name: 'Private user name',
@@ -79,7 +79,14 @@ it('rejects mutation, nested, broad, and excessive HogQL before network access',
     'SELECT event FROM events; DROP TABLE events',
     'SELECT event FROM events UNION SELECT email FROM persons',
     'SELECT properties FROM events', 'SELECT event FROM events LIMIT 11',
-    'SELECT event FROM events -- hidden', 'SELECT event FROM events JOIN persons ON 1=1']) {
+    'SELECT event FROM events -- hidden', 'SELECT event FROM events JOIN persons ON 1=1',
+    "SELECT event FROM events WHERE event = 'safe') OR 1=1 OR (event = 'other'",
+    "SELECT event FROM events WHERE event = 'safe' AND (event = 'other'",
+    'SELECT person.id AS event FROM events',
+    'SELECT properties.id AS event FROM events',
+    'SELECT event AS email FROM events',
+    'SELECT event, count(*) FROM events GROUP BY person.id',
+    'SELECT event FROM events ORDER BY person.id']) {
     expect(() => boundedHogql(query, from, to, 10, 60)).toThrow();
   }
   expect(() => boundedHogql('SELECT event FROM events', from, '2026-01-01T02:00:00Z', 10, 60)).toThrow();
@@ -113,7 +120,7 @@ it('returns bounded analytics and summary metadata without planted identity or t
     const results = [];
     for (const call of calls) results.push(await fixture.client.callTool(call));
     expect(results[0]?.structuredContent).toMatchObject({
-      data: { rows: [['demo_event', 3, '[REDACTED]']] }, examined: { rowCount: 1 },
+      data: { columns: ['event', 'count'], rows: [['demo_event', 3]] }, examined: { rowCount: 1 },
     });
     expect(results[1]?.structuredContent).toMatchObject({ data: { id: 7, kind: 'TRENDS' } });
     expect(results[2]?.structuredContent).toMatchObject({ data: [{ status: 'active', severity: 'high' }] });
@@ -122,6 +129,21 @@ it('returns bounded analytics and summary metadata without planted identity or t
     for (const planted of ['person@example.invalid', 'Private user name', 'private-targeting-rule',
       'never-expose-this', 'synthetic-issue-id']) expect(serialized).not.toContain(planted);
     expect(readFileSync(fixture.auditPath, 'utf8').trim().split('\n')).toHaveLength(4);
+  } finally { await fixture.close(); }
+});
+
+it('rejects an upstream column shape that could relabel private data', async () => {
+  mock.use(http.post(`${base}/api/projects/123/query/`, () => HttpResponse.json({
+    columns: ['event', 'count', 'email'], results: [['demo_event', 3, 'private-identity']],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'posthog_hogql', arguments: {
+      projectId: 123, query: 'SELECT event, count(*) FROM events GROUP BY event',
+      from: '2026-01-01T00:00:00Z', to: '2026-01-01T00:10:00Z',
+    } });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('private-identity');
   } finally { await fixture.close(); }
 });
 

@@ -19,11 +19,13 @@ cache-hit rate, and p50/p95 token and duration values per job kind. Trend
 groups UTC weeks and shows week-over-week token drift; a zero prior baseline
 produces `null` rather than an invented percentage.
 
-Cost is `unknown` until the private config has a dated `priceTable` entry for
+Weekly trend totals use every eligible job in the requested window even when
+the report's displayed job list is capped. Cost is `unknown` until the private config has a dated `priceTable` entry for
 the exact model. When present, the result says `estimated` and includes the
 price table date. These figures do not represent billing records. Claude usage
-records can repeat during streaming; the parser deduplicates exact timestamp,
-model, and usage-count snapshots. Codex session totals take precedence over
+records can repeat during streaming; the parser groups snapshots by message ID
+and takes the largest observed counts for that message. Records without an ID
+fall back to exact timestamp, model, and count deduplication. Codex session totals take precedence over
 incremental token-count events. Check source format changes before relying on
 cross-version comparisons.
 
