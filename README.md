@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, and PostHog reads are implemented locally. A local Docker stack provides synthetic Grafana and uptime data for the demo. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. Hostinger, incident correlation, and agent usage reports remain on the roadmap.
+**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, and PostHog reads are implemented locally. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data for the demo. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Incident correlation and agent usage reports remain on the roadmap.
 
 ## The examined principle
 
@@ -39,7 +39,7 @@ npm run smoke:demo
 docker compose down
 ```
 
-The smoke test checks the demo services and calls the MCP dashboard, metric, and log tools over stdio. The demo API continuously emits synthetic metrics and logs, so returned row counts vary over time.
+The smoke test checks the demo services and calls the MCP dashboard, metric, host metric, and log tools over stdio. The demo API continuously emits synthetic metrics and logs, so returned row counts vary over time. On Docker Desktop, node-exporter describes the demo's Linux VM, not the laptop host.
 
 To exercise the real demo Kuma, open `http://127.0.0.1:3001` and finish its
 first-run setup with a local admin credential. Add an HTTP monitor named
@@ -61,7 +61,9 @@ only the page's public JSON. If no page is published yet, the tool returns
 | `cloudwatch_metric_data`, `cloudwatch_alarms`, `cloudwatch_log_groups`, `cloudwatch_logs_insights` | Implemented locally | Bounded AWS metrics, alarms, configured log groups, and Logs Insights with scan accounting |
 | `iam_whoami`, `iam_roles`, `iam_role_policies`, `iam_simulate_access`, `iam_analyzer_findings` | Implemented locally | Configured roles, trust shape, policy counts, one-action simulation, and external-analyzer findings |
 | `posthog_hogql`, `posthog_insight`, `posthog_error_issues`, `posthog_flag` | Implemented locally | Bounded event queries and safe insight, issue, and flag summaries |
-| Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
+| Host health | Demo query available | `node_*` through Grafana; live exporter deployment is pending |
+| Hostinger | Excluded from v1 | Personal tokens cannot prove zero write access |
+| Timeline | Planned | Cited correlation across enabled read-only providers |
 | `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
 
 Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
@@ -71,6 +73,8 @@ Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana cre
 The server starts with write actions disabled. Grafana startup checks the credential's permissions and refuses write-capable tokens by default. Every provider HTTP request must match an exact method and endpoint allowlist. Query windows, sizes, and timeouts are capped. Central redaction masks common identity fields and values, credentials, emails, and IP addresses. Each tool call writes one redacted JSON line to the configured owner-only audit path. The server has no telemetry. Tool output is marked as untrusted data.
 
 Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime.md). It never returns monitor URLs or page configuration. A missing or unpublished page returns `not_published`; incomplete or unreachable data remains `unknown`. Neither is reported as healthy.
+
+Host and container health use the existing Grafana metric path. The [host-health query guide](docs/permissions/host-health.md) shows bounded `node_*` and `container_*` expressions and the evidence needed before calling a live exporter available. The MCP never loads a Hostinger token. The separate public Kuma JSON provides reachability; it does not infer host resource health.
 
 CloudWatch requires a named profile in an owner-only credentials file. Startup checks the principal and simulates selected write actions before registering its tools. Logs Insights reads only configured groups, requires a final `| limit`, and stops a query that exceeds its scan cap or deadline. The [AWS permission guide](docs/permissions/aws.md) lists the needed actions. AWS identifiers are redacted by default.
 

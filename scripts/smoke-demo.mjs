@@ -38,6 +38,7 @@ try {
   await client.connect(transport);
   const dashboards = await call('grafana_search_dashboards', { query: 'Synthetic', limit: 10 });
   const metrics = await call('prometheus_instant', { query: 'demo_db_pool_in_use' });
+  const hostMetric = await call('prometheus_instant', { query: 'node_load1{job="node-exporter"}' });
   const to = new Date();
   const from = new Date(to.getTime() - 10 * 60_000);
   const logs = await call('loki_logs', {
@@ -47,13 +48,14 @@ try {
     to: to.toISOString(),
     limit: 20,
   });
-  if (dashboards.data.length < 1 || metrics.data.length < 1 || logs.data.length < 1) {
-    throw new Error('Synthetic incident evidence was not available from all three queries');
+  if (dashboards.data.length < 1 || metrics.data.length < 1 || hostMetric.data.length < 1 || logs.data.length < 1) {
+    throw new Error('Synthetic incident and demo host metrics were not available');
   }
   process.stdout.write(`${JSON.stringify({
     result: 'pass',
     dashboards: dashboards.examined.rowCount,
     metricRows: metrics.examined.rowCount,
+    hostMetricRows: hostMetric.examined.rowCount,
     logRows: logs.examined.rowCount,
     lokiScannedBytes: logs.examined.byteCount,
   })}\n`);

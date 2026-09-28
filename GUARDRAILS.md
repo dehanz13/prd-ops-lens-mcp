@@ -20,7 +20,7 @@ implemented, so each milestone can end with a green build.
 | G1.1 | AWS write permission preflight | `test/guardrails-foundation.test.ts` |
 | G1.2 | Grafana write permission preflight | `test/guardrails-foundation.test.ts` |
 | G1.3 | PostHog scope preflight | `test/guardrails-foundation.test.ts` |
-| G1.4 | Hostinger scope preflight | `test/guardrails-foundation.test.ts` |
+| G1.4 | Hostinger personal tokens inherit owner permissions, so the check always refuses them; no Hostinger provider is registered | `test/guardrails-foundation.test.ts` |
 | G2.1 | Grafana data-source query route only | `test/grafana.test.ts` |
 | G2.2 | PromQL length, range, step and series caps | `test/grafana.test.ts` |
 | G2.3 | LogQL selector, window, regex and scan caps | `test/grafana.test.ts` |
@@ -37,6 +37,9 @@ implemented, so each milestone can end with a green build.
 | G6.1 | Single SELECT, UTC window, row limit and timeout | `test/posthog.test.ts` |
 | G6.2 | Identity-safe projections; no recording or console route | `test/posthog.test.ts` |
 | G6.3 | Exact project allowlist and key scope binding | `test/posthog.test.ts` |
+| G7.1 | No Hostinger API provider or owner-scoped token path | `test/host-health.test.ts` |
+| G7.2 | Demo node exporter metrics read through Grafana only | `test/host-health.test.ts` |
+| G7.3 | Reachability from public Kuma status JSON; missing page is not healthy | `test/uptime.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |

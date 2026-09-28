@@ -191,10 +191,10 @@ describe('credential strength preflight', () => {
     expect(() => checkPostHogScopes(read, [123], [123], ['org-id'])).toThrow();
   });
 
-  // @guardrail G1.4: unverified or write-capable Hostinger scopes fail closed.
-  it('accepts verified read scopes only', () => {
-    expect(checkHostingerScopes(['vps:read'])).toEqual({});
-    expect(() => checkHostingerScopes(undefined)).toThrow('could not be verified');
-    expect(() => checkHostingerScopes(['vps:write'])).toThrow('could not be verified');
+  // @guardrail G1.4: owner-scoped Hostinger personal tokens always fail closed.
+  it('refuses Hostinger personal tokens even when metadata claims read access', () => {
+    expect(() => checkHostingerScopes(['vps:read'])).toThrow('cannot prove zero write access');
+    expect(() => checkHostingerScopes(undefined)).toThrow('cannot prove zero write access');
+    expect(() => checkHostingerScopes(['vps:write'])).toThrow('cannot prove zero write access');
   });
 });

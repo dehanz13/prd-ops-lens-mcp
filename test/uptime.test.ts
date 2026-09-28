@@ -75,6 +75,7 @@ it('returns not_published for an explicitly unpublished page', async () => {
   } finally { await fixture.close(); }
 });
 
+// @guardrail G7.3: VPS reachability comes only from public Kuma JSON and cannot default to healthy.
 it('returns not_published when the public status-page route is 404', async () => {
   mockServer.use(http.get(`${base}/api/status-page/demo`, () => new HttpResponse(null, { status: 404 })));
   const fixture = await harness();

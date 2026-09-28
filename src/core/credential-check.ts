@@ -57,9 +57,9 @@ export function checkPostHogScopes(
   return {};
 }
 
-export function checkHostingerScopes(scopes: readonly string[] | undefined): CredentialCheck {
-  if (!scopes || scopes.length === 0 || scopes.some((scope) => !scope.endsWith(':read'))) {
-    throw new OpsError('REFUSED', 'Hostinger read-only scope could not be verified');
-  }
-  return {};
+export function checkHostingerScopes(scopes: readonly string[] | undefined): never {
+  void scopes;
+  // Personal API tokens inherit the owner's permissions. A string claiming
+  // "read" cannot prove the credential is unable to write.
+  throw new OpsError('REFUSED', 'Hostinger personal tokens cannot prove zero write access');
 }
