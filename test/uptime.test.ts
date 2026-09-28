@@ -62,15 +62,38 @@ it('projects safe monitor and incident fields with the newest heartbeat', async 
   } finally { await fixture.close(); }
 });
 
-it('treats unpublished or incomplete pages as unknown, never up', async () => {
+it('returns not_published for an explicitly unpublished page', async () => {
   mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
     config: { published: false }, incidents: [], publicGroupList: null,
   })));
   const fixture = await harness();
   try {
     const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
-    expect(result.structuredContent).toMatchObject({ data: { state: 'unknown', monitors: [] },
+    expect(result.structuredContent).toMatchObject({ data: { state: 'not_published', monitors: [] },
       examined: { rowCount: 0 } });
+  } finally { await fixture.close(); }
+});
+
+it('returns not_published when the public status-page route is 404', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () => new HttpResponse(null, { status: 404 })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({ data: { state: 'not_published', monitors: [] },
+      examined: { rowCount: 0 } });
+    expect(result.isError).toBe(false);
+  } finally { await fixture.close(); }
+});
+
+it('returns not_published when Kuma serves its HTML fallback for a missing slug', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/demo`, () =>
+    new HttpResponse('<!doctype html><title>Uptime Kuma</title>', {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({ data: { state: 'not_published', monitors: [] } });
   } finally { await fixture.close(); }
 });
 

@@ -48,7 +48,11 @@ export class BoundedHttpClient {
       throw new OpsError('PERMISSION', `${this.provider}: read permission denied; check the provider permission guide`);
     }
     if (response.status === 429) throw new OpsError('RATE_LIMIT', `${this.provider}: rate limited; retry later`);
+    if (response.status === 404) throw new OpsError('NOT_FOUND', `${this.provider}: public resource not found`);
     if (!response.ok) throw new OpsError('UPSTREAM', `${this.provider}: upstream returned HTTP ${response.status}`);
+    if (this.provider === 'Uptime Kuma' && response.headers.get('content-type')?.includes('text/html')) {
+      throw new OpsError('NOT_FOUND', 'Uptime Kuma: public status page not found');
+    }
     const declaredLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(declaredLength) && declaredLength > this.maxResponseBytes) {
       throw new OpsError('RESPONSE_LIMIT', `${this.provider}: response exceeds configured byte cap`);

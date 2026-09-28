@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { auditedInput, runValidatedTool } from '../core/audited-input.js';
 import type { Config } from '../core/config.js';
 import { BoundedHttpClient } from '../core/http.js';
-import { examined, ToolResultSchema, type ToolResult } from '../core/result.js';
+import { examined, OpsError, ToolResultSchema, type ToolResult } from '../core/result.js';
 import { UNTRUSTED_DATA_NOTICE, type ToolRuntime } from '../core/tool.js';
 import type { ProviderModule } from './provider.js';
 
@@ -84,10 +84,18 @@ export class UptimeProvider implements ProviderModule {
       statusBody = status.body;
       heartbeatBody = heartbeats.body;
       bytes = status.bytes + heartbeats.bytes;
-    } catch {
+    } catch (error) {
+      if (error instanceof OpsError && error.code === 'NOT_FOUND') {
+        return this.unavailable(started, 'Public status page is not published', 0, 'not_published');
+      }
       return this.unavailable(started, 'Public status page data is unavailable');
     }
 
+    const publication = z.object({ config: z.object({ published: z.boolean() }).passthrough() })
+      .passthrough().safeParse(statusBody);
+    if (publication.success && !publication.data.config.published) {
+      return this.unavailable(started, 'Public status page is not published', bytes, 'not_published');
+    }
     const page = z.object({ config: z.object({ published: z.boolean() }).passthrough(),
       incidents: z.array(z.unknown()), publicGroupList: z.array(groupSchema),
     }).passthrough().safeParse(statusBody);
@@ -95,8 +103,8 @@ export class UptimeProvider implements ProviderModule {
       heartbeatList: z.record(z.string(), z.array(heartbeatSchema)),
       uptimeList: z.record(z.string(), z.number()),
     }).passthrough().safeParse(heartbeatBody);
-    if (!page.success || page.data.config.published !== true || !heartbeat.success) {
-      return this.unavailable(started, 'Public status page is unpublished or incomplete', bytes);
+    if (!page.success || !heartbeat.success) {
+      return this.unavailable(started, 'Public status page data is incomplete', bytes);
     }
 
     const warnings: string[] = [];
@@ -133,8 +141,9 @@ export class UptimeProvider implements ProviderModule {
       }) };
   }
 
-  private unavailable(started: string, warning: string, bytes = 0): ToolResult {
-    return { data: { state: 'unknown', monitors: [], incidents: [] },
+  private unavailable(started: string, warning: string, bytes = 0,
+    state: 'unknown' | 'not_published' = 'unknown'): ToolResult {
+    return { data: { state, monitors: [], incidents: [] },
       examined: examined('uptime', 'GET public status page and heartbeat for configured slug', {
         window: { from: started, to: new Date().toISOString() }, byteCount: bytes,
         warnings: [warning],
