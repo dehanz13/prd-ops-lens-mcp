@@ -59,9 +59,9 @@ scopes where the target account and API support it.
 }
 ```
 
-The [CloudWatch Logs authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html)
+The [CloudWatch Logs authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html),
 the [CloudWatch authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_cloudwatch.html),
-and [IAM simulator API reference](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html)
+and the [IAM simulator API reference](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html)
 are the sources for resource-level support and simulation behavior.
 
 The simulation checks representative IAM, Logs, Lambda, and CloudFormation
