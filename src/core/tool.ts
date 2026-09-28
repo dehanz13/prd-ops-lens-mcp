@@ -84,7 +84,9 @@ export async function runTool<T>(
         ? { error: error.message, code: error.code }
         : { error: `${provider}: request failed; check configuration and permissions`, code: 'PROVIDER_ERROR' },
       examined: examined(provider, typeof parametersObject.query === 'string' ? parametersObject.query : `${tool} failed`, {
-        ...(window ? { window } : {}), warnings: ['No complete result was returned'],
+        ...(window ? { window } : {}),
+        ...(error instanceof OpsError ? error.details : {}),
+        warnings: ['No complete result was returned'],
       }),
     };
   } finally {

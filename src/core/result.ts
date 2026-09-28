@@ -37,7 +37,8 @@ export function examined(provider: string, query: string, overrides: Partial<Exa
 }
 
 export class OpsError extends Error {
-  constructor(public readonly code: string, message: string) {
+  constructor(public readonly code: string, message: string,
+    public readonly details: Partial<Examined> = {}) {
     super(message);
     this.name = 'OpsError';
   }

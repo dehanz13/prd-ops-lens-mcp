@@ -1,0 +1,5 @@
+{
+  "status": "Complete",
+  "results": [[{ "field": "@message", "value": "synthetic" }]],
+  "statistics": { "bytesScanned": 512, "recordsScanned": 2 }
+}

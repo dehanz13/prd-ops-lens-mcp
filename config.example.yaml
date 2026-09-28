@@ -5,6 +5,7 @@ redaction:
   identityKeys: [userId, playerId, sessionId]
   identityLabels: [user, player, session, room]
   identityValues: []
+  awsIdentifiers: true
 limits:
   maxWindowMinutes: 60
   maxRows: 1000
@@ -24,6 +25,15 @@ providers:
     enabled: false
     baseUrl: https://status.example.invalid
     slug: demo
+  cloudwatch:
+    enabled: false
+    region: us-east-1
+    profile: readonly-demo
+    credentialsFile: /private/path/to/readonly-aws-credentials
+    logGroups:
+      - /demo/example
+    maxLogWindowMinutes: 60
+    maxScanBytes: 5000000
 writes:
   enabled: false
   demoOnly: true

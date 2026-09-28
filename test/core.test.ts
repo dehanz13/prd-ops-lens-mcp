@@ -25,6 +25,7 @@ const redactionConfig = {
   identityKeys: ['playerId'],
   identityLabels: ['room', 'player'],
   identityValues: [],
+  awsIdentifiers: true,
 };
 
 describe('configuration', () => {

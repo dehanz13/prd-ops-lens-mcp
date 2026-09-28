@@ -20,6 +20,7 @@ export const ConfigSchema = z.strictObject({
     identityKeys: z.array(z.string().min(1)).default(['userId', 'playerId', 'sessionId', 'accountId']),
     identityLabels: z.array(z.string().min(1)).default(['user', 'player', 'session', 'room', 'account']),
     identityValues: z.array(z.string().min(1)).default([]),
+    awsIdentifiers: z.boolean().default(true),
   }).prefault({}),
   limits: z.strictObject({
     maxWindowMinutes: z.number().int().min(1).max(1440).default(60),
@@ -43,6 +44,16 @@ export const ConfigSchema = z.strictObject({
       enabled: z.boolean().default(false),
       baseUrl,
       slug: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    }).optional(),
+    cloudwatch: z.strictObject({
+      enabled: z.boolean().default(false),
+      region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
+      profile: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+      credentialsFile: absolutePath,
+      logGroups: z.array(z.string().min(1).max(512)).min(1).max(10)
+        .refine((groups) => new Set(groups).size === groups.length, 'Log groups must be unique'),
+      maxLogWindowMinutes: z.number().int().min(1).max(1440).default(60),
+      maxScanBytes: z.number().int().min(1024).max(100_000_000).default(5_000_000),
     }).optional(),
   }).prefault({}),
   writes: z.strictObject({
@@ -76,13 +87,17 @@ export function providerToken(envName: string, env: NodeJS.ProcessEnv = process.
 
 /** Read an owner-only credential file without including its value in errors. */
 export function readPrivateCredentialFile(path: string): string {
+  assertPrivateCredentialFile(path);
+  const value = readFileSync(path, 'utf8').trim();
+  if (!value) throw new Error('Credential file is empty');
+  return value;
+}
+
+export function assertPrivateCredentialFile(path: string): void {
   const status = lstatSync(path);
   if (!status.isFile() || status.uid !== process.getuid?.() || (status.mode & 0o077) !== 0) {
     throw new Error('Credential file must be an owner-only regular file');
   }
-  const value = readFileSync(path, 'utf8').trim();
-  if (!value) throw new Error('Credential file is empty');
-  return value;
 }
 
 export function providerTokenFile(path: string): string {

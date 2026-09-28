@@ -8,6 +8,8 @@ const bearer = /\bBearer\s+[^\s,;]+/gi;
 const tokenAssignment = /\b((?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*)[^\s,;]+/gi;
 const jwt = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const cloudKey = /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g;
+const awsArn = /\barn:[a-z0-9-]+:[a-z0-9-]*:[a-z0-9-]*:\d{12}:[^\s,;"']+/gi;
+const awsAccountId = /\b\d{12}\b/g;
 const prefixedToken = /\b(?:sk-|phx_|glsa_)[A-Za-z0-9_-]{8,}\b/gi;
 const longToken = /\b[A-Za-z0-9_-]{32,}\b/g;
 // Deliberate control-character matching protects the MCP transport from terminal escapes.
@@ -17,11 +19,13 @@ const ansi = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 const control = /[\u0000-\u001f\u007f]/g;
 
 export class Redactor {
+  private readonly awsIdentifiers: boolean;
   private readonly identityKeys: Set<string>;
   private readonly identityPattern: RegExp | null;
   private readonly identityValues: string[];
 
   constructor(config: Config['redaction']) {
+    this.awsIdentifiers = config.awsIdentifiers;
     this.identityKeys = new Set(config.identityKeys.map((key) => key.toLowerCase()));
     this.identityValues = config.identityValues.filter(Boolean);
     const labels = config.identityLabels.filter(Boolean).map(escapeRegExp);
@@ -41,8 +45,11 @@ export class Redactor {
       .replace(prefixedToken, '[REDACTED]')
       .replace(email, '[REDACTED]')
       .replace(ipv4, '[REDACTED]')
-      .replace(ipv6, '[REDACTED]')
-      .replace(longToken, (candidate) => entropy(candidate) >= 4 ? '[REDACTED]' : candidate);
+      .replace(ipv6, '[REDACTED]');
+    if (this.awsIdentifiers) {
+      result = result.replace(awsArn, '[REDACTED]').replace(awsAccountId, '[REDACTED]');
+    }
+    result = result.replace(longToken, (candidate) => entropy(candidate) >= 4 ? '[REDACTED]' : candidate);
     if (this.identityPattern) {
       result = result.replace(this.identityPattern, '$1[REDACTED]');
     }

@@ -27,6 +27,10 @@ implemented, so each milestone can end with a green build.
 | G2.4 | Structured log-code matching | `test/grafana.test.ts` |
 | G3.1 | Public status-page JSON only | `test/uptime.test.ts` |
 | G3.2 | Safe monitor projection and newest heartbeat | `test/uptime.test.ts` |
+| G4.1 | Fixed CloudWatch read actions | `test/cloudwatch.test.ts` |
+| G4.2 | Configured log group allowlist | `test/cloudwatch.test.ts` |
+| G4.3 | Logs Insights window, row and scan caps | `test/cloudwatch.test.ts` |
+| G4.4 | Configurable AWS identifier redaction | `test/cloudwatch.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |

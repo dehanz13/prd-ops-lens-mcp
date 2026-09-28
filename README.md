@@ -58,7 +58,8 @@ only the page's public JSON. If no page is published yet, the tool returns
 | `prometheus_instant`, `prometheus_range` | Implemented | Metric frames through Grafana `/api/ds/query`; range steps are at least 60 seconds |
 | `loki_logs` | Implemented | Log frames through Grafana `/api/ds/query`, after a read-only index scan estimate |
 | `uptime_status` | Implemented | Public status-page JSON, newest heartbeat, and safe incident summaries |
-| AWS, PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
+| `cloudwatch_metric_data`, `cloudwatch_alarms`, `cloudwatch_log_groups`, `cloudwatch_logs_insights` | Implemented locally | Bounded AWS metrics, alarms, configured log groups, and Logs Insights with scan accounting |
+| IAM, PostHog, Hostinger, timeline | Planned | Bounded provider reads and cited correlation |
 | `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
 
 Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
@@ -68,6 +69,8 @@ Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana cre
 The server starts with write actions disabled. Grafana startup checks the credential's permissions and refuses write-capable tokens by default. Every provider HTTP request must match an exact method and endpoint allowlist. Query windows, sizes, and timeouts are capped. Central redaction masks common identity fields and values, credentials, emails, and IP addresses. Each tool call writes one redacted JSON line to the configured owner-only audit path. The server has no telemetry. Tool output is marked as untrusted data.
 
 Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime.md). It never returns monitor URLs or page configuration. A missing or unpublished page returns `not_published`; incomplete or unreachable data remains `unknown`. Neither is reported as healthy.
+
+CloudWatch requires a named profile in an owner-only credentials file. Startup checks the principal and simulates selected write actions before registering its tools. Logs Insights reads only configured groups, requires a final `| limit`, and stops a query that exceeds its scan cap or deadline. The [AWS permission guide](docs/permissions/aws.md) lists the needed actions. AWS identifiers are redacted by default.
 
 Loki's `/index/stats` response is an estimate and can exclude recent ingester data. The `examined` block identifies the estimate and reports returned lines separately. Do not interpret a zero-byte estimate as proof that no logs were scanned.
 
@@ -91,7 +94,7 @@ The foundation replay has **1/1 evidence check** and **1/1 positive control** in
 
 ## Roadmap
 
-1. Direct AWS reads with limited credentials.
+1. Validate CloudWatch against a supplied least-privilege read profile.
 2. PostHog and VPS provider reads, correlation, resources, and prompts.
 3. Incident replay evals, the gated demo restart, agent usage reports, and a tagged release.
 
