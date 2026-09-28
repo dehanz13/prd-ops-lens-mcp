@@ -119,6 +119,21 @@ describe('foundation guardrails', () => {
     expect(Buffer.byteLength(JSON.stringify(result.structuredContent))).toBeLessThanOrEqual(1024);
   });
 
+  it('keeps the complete MCP response bounded when oversized warnings are replaced', async () => {
+    const { log } = audit();
+    const result = await runTool({ audit: log, redactor, maxOutputBytes: 1024 },
+      'query', 'local', {}, async () => ({
+        data: [], examined: examined('provider'.repeat(400), 'query'.repeat(400), {
+          warnings: ['warning'.repeat(1000)],
+        }),
+      }));
+    const returned = (result.content?.[0] as { text: string }).text;
+    expect(Buffer.byteLength(returned)).toBeLessThanOrEqual(1024);
+    expect(result.structuredContent).toMatchObject({ examined: {
+      rowCount: 0, truncated: true, warnings: ['Output size cap applied'],
+    } });
+  });
+
   // @guardrail G0.5: hostile log text remains quoted data; terminal escapes are stripped.
   it('marks tool output untrusted and never interprets injected action text', async () => {
     const { log } = audit();

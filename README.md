@@ -2,8 +2,8 @@
 
 <p align="center">
   <a href="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml"><img alt="Latest pull request checks" src="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml/badge.svg?event=pull_request"></a>
-  <a href="#verification"><img alt="148 local tests passing" src="https://img.shields.io/badge/tests-148%20passing%20locally-brightgreen"></a>
-  <a href="#verification"><img alt="94.77 percent local line coverage" src="https://img.shields.io/badge/line%20coverage-94.77%25%20local-brightgreen"></a>
+  <a href="#verification"><img alt="156 local tests passing" src="https://img.shields.io/badge/tests-156%20passing%20locally-brightgreen"></a>
+  <a href="#verification"><img alt="94.88 percent local line coverage" src="https://img.shields.io/badge/line%20coverage-94.88%25%20local-brightgreen"></a>
   <a href="#verification"><img alt="Zero production dependency advisories in the local audit" src="https://img.shields.io/badge/production%20audit-0%20advisories%20local-brightgreen"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/dehanz13/prd-ops-lens-mcp"></a>
 </p>
@@ -55,8 +55,7 @@ flowchart LR
    npm ci --ignore-scripts
    npm run build
    ```
-
-2. **Create a private config.** The example starts with providers disabled, so no credential is needed yet.
+2. **Create a private config.** The example starts with providers disabled, so no credential is needed yet. The config and token files must be owner-only regular files (`chmod 600`) with no links.
 
    ```sh
    mkdir -p ~/.config/prd-ops-lens-mcp

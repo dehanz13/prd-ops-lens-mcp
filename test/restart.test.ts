@@ -147,6 +147,22 @@ it('refuses self-target, deploy lock, other names and cooldown after a process r
   expect(fixture.restarts).toBe(0);
 });
 
+it('refuses a lock introduced by the health check before sending a restart', async () => {
+  for (const lock of ['killSwitchFile', 'deployLockFile'] as const) {
+    const fixture = setup();
+    const gate = new RestartGate(fixture.writes, fixture.api, () => now);
+    const token = confirmation(await gate.plan('demo-api'));
+    const api = fixture.api;
+    api.health = async () => {
+      writeFileSync(fixture.writes[lock], 'stop');
+      return 'healthy';
+    };
+    await expect(gate.confirm({ container: 'demo-api', token,
+      reason: 'Synthetic recovery reason' })).rejects.toMatchObject({ code: 'REFUSED' });
+    expect(fixture.restarts).toBe(0);
+  }
+});
+
 // @guardrail G9.3: an unknown Docker start time cannot bypass durable cooldown.
 it('refuses restart planning when the target start time is missing or invalid', async () => {
   const fixture = setup();

@@ -46,11 +46,19 @@ export function scanProposedPush(input, terms, git = execFileSync) {
     if (parts.length !== 4) throw new Error('Malformed proposed push reference');
     const [, localOid, , remoteOid] = parts;
     if (zero.test(localOid)) continue;
-    const revision = zero.test(remoteOid) ? localOid : `${remoteOid}..${localOid}`;
-    const diff = git('git', ['log', '--format=', '--patch', '--no-ext-diff', revision], {
+    const newRef = zero.test(remoteOid);
+    const revision = newRef ? localOid : `${remoteOid}..${localOid}`;
+    const diff = git('git', ['log', '--format=', '--patch', '--diff-merges=separate', '--root',
+      '--no-ext-diff', revision], {
       encoding: 'utf8', maxBuffer: 10 * 1024 * 1024,
     });
     if (containsPrivateTerm(diff, terms)) return false;
+    if (!newRef) {
+      const treeDiff = git('git', ['diff', '--no-ext-diff', remoteOid, localOid], {
+        encoding: 'utf8', maxBuffer: 10 * 1024 * 1024,
+      });
+      if (containsPrivateTerm(treeDiff, terms)) return false;
+    }
   }
   return true;
 }

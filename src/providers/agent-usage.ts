@@ -37,22 +37,27 @@ function time(value: unknown): number | null {
 function safeModel(value: unknown): string | null {
   return typeof value === 'string' && /^[a-zA-Z0-9._:-]{1,80}$/.test(value) ? value : null;
 }
-function checkFile(path: string): number {
+function checkFile(path: string) {
   const stat = lstatSync(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() ||
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.uid !== process.getuid?.() ||
     (stat.mode & 0o077) !== 0) {
     throw new OpsError('REFUSED', 'Agent transcript must be an owner-only regular file');
   }
   if (stat.size > 50_000_000) throw new OpsError('QUERY_LIMIT', 'Agent transcript exceeds 50 MB');
-  return stat.size;
+  return stat;
 }
 
 /** Project only named usage metadata; message content and tool payloads are never accessed. */
 export async function parseUsageFile(path: string, config: UsageConfig): Promise<ParsedFile> {
-  checkFile(path);
+  const checked = checkFile(path);
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  const opened = fstatSync(fd);
-  if (!opened.isFile() || opened.uid !== process.getuid?.() || (opened.mode & 0o077) !== 0 ||
+  let opened;
+  try { opened = fstatSync(fd); } catch {
+    closeSync(fd);
+    throw new OpsError('REFUSED', 'Agent transcript changed after its file check');
+  }
+  if (!opened.isFile() || opened.dev !== checked.dev || opened.ino !== checked.ino ||
+    opened.nlink !== 1 || opened.uid !== process.getuid?.() || (opened.mode & 0o077) !== 0 ||
     opened.size > 50_000_000) {
     closeSync(fd);
     throw new OpsError('REFUSED', 'Agent transcript changed after its file check');
