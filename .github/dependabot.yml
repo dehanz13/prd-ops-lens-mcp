@@ -4,6 +4,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      eslint-tooling:
+        patterns:
+          - eslint
+          - '@eslint/js'
+    ignore:
+      # Keep the compiler inside typescript-eslint's supported peer range.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # Type definitions track the Node 22 runtime used for local and hosted gates.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:

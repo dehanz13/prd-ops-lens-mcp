@@ -12,7 +12,11 @@ checklist and the [pinned Definition of Done issue](https://github.com/dehanz13/
 the PR is reviewed and merged into `develop`. `main` is reserved for
 production-ready releases.
 
-Story points use 1, 2, 3, 5, or 8 to show relative effort and uncertainty.
+New stories use 1, 2, 3, or 5 points. Development work starts at 2 points;
+1 point is reserved for small documentation or coordination work. Split work
+larger than 5 points into independently testable stories before planning a
+sprint. Earlier 8-point estimates remain in the historical board record so
+completed velocity is not changed retroactively.
 Velocity is the sum of points on stories actually completed in that sprint;
 unfinished stories contribute zero and return to planning. Sprint notes report
 the goal, completed work, actual points, slips and reasons, and one change for

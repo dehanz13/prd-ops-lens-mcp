@@ -41,6 +41,7 @@ body:
     id: size
     attributes:
       label: Size (points)
-      options: ['1', '2', '3', '5', '8']
+      description: 'Use 2, 3, or 5 for development. Split work larger than 5; use 1 only for small docs or coordination.'
+      options: ['1', '2', '3', '5']
     validations:
       required: true
