@@ -21,3 +21,18 @@ the next sprint. Planned estimates are never reported as completed velocity.
 Sprint 1 targets the foundation and local synthetic demo stack. Sprint 2
 targets the remaining Grafana work and public uptime status. Later milestones
 enter the sprint only when their credentials and guardrail work are Ready.
+
+## Local verification while hosted CI is unavailable
+
+For each new PR head, run `scripts/local-gates.sh <full-commit-sha>` with Node 22
+or newer. The script creates a fresh temporary worktree at that exact commit,
+installs from the lockfile, and runs lint, typecheck, coverage tests, evals,
+guardrail traceability, build, production dependency audit, SBOM generation,
+gitleaks, and the private denylist. It posts `local/*` commit statuses with
+measured counts and the Node version. An unavailable gate gets `error`, never
+`success`; the GitHub PR dependency-review action remains unavailable locally.
+
+These statuses record self-run evidence. They do not replace the repository's
+GitHub Actions checks. Once Actions can start jobs again, rerun CI at every
+open PR head and require green hosted checks on the release commit before
+merging or tagging it.
