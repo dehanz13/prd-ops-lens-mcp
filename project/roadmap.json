@@ -77,13 +77,13 @@
     },
     {
       "id": "G",
-      "name": "VPS status with optional SSH reads",
-      "goal": "Read provider status and tightly allowlisted host diagnostics without shell passthrough.",
+      "name": "Host health through Grafana and public Kuma",
+      "goal": "Read VPS resource pressure from Grafana metrics and reachability from public Kuma JSON without a Hostinger API provider.",
       "guardrails": ["G7"],
       "stories": [
-        {"title": "As an on-call engineer, I can inspect VPS state and resource use so that I can identify host pressure", "priority": "P1", "size": 5, "guardrails": ["G7.1"], "criteria": ["Provider API calls use a read-scoped token and an endpoint allowlist.", "Replay tests cover state, utilization, pagination, and empty responses."]},
-        {"title": "As an on-call engineer, I can inspect recent provider actions so that I can correlate maintenance with an incident", "priority": "P2", "size": 3, "guardrails": ["G7.1"], "criteria": ["Recent actions are time-capped and returned as untrusted data through the GET allowlist.", "Tests redact planted identifiers and preserve source timestamps."]},
-        {"title": "As a security reviewer, I can opt into fixed SSH diagnostics so that host reads never accept arbitrary shell input", "priority": "P1", "size": 8, "guardrails": ["G7.2", "G7.3"], "criteria": ["SSH is off by default and accepts only named read commands with strict arguments; docs explain Docker group privilege.", "Negative tests reject shell metacharacters, disallowed commands, and excessive log tails."]}
+        {"title": "As a security reviewer, I can verify Hostinger tokens are refused so that no owner-scoped credential enters the server", "priority": "P0", "size": 3, "guardrails": ["G7.1"], "criteria": ["No Hostinger provider is registered and personal tokens fail the zero-write check.", "Tests prove the refusal without loading a real token."]},
+        {"title": "As an on-call engineer, I can read host metrics through Grafana so that I can identify resource pressure", "priority": "P1", "size": 5, "guardrails": ["G7.4"], "criteria": ["Demo node-exporter metrics are queried through Grafana's verified read-only route.", "Missing host series remain unknown and existing metric series are unaffected."]},
+        {"title": "As an on-call engineer, I can read public Kuma status JSON so that I can distinguish reachability from host pressure", "priority": "P1", "size": 5, "guardrails": ["G7.5"], "criteria": ["Only public status JSON endpoints are called with a configurable base URL and slug.", "A missing page or heartbeat feed never reports healthy."]}
       ]
     },
     {

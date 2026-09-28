@@ -29,3 +29,11 @@ session authorized for the repository and Projects, `--apply` creates or finds
 the project, labels, epics, stories, fields, views, and pinned Definition of
 Done issue. Review the Project after seeding and record actual completed points
 only in a sprint-end note.
+
+`--apply` also writes to existing resources. It makes the Project public,
+replaces Status, Priority, or Size options when they differ (which can clear
+existing card values), and runs `gh label create --force` to update label
+colors and descriptions. It rewrites epic bodies to refresh story task lists.
+The Milestone G migration renames the owner-created legacy epic and stories and
+replaces their bodies with the approved Grafana and public Kuma plan. Inspect
+these changes before rerunning the seeder on an established project.

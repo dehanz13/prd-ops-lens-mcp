@@ -17,6 +17,15 @@ const labels = {
   'tech-debt': ['cfd3d7', 'Maintenance or investigation'],
   'good-first-issue': ['a2eeef', 'Suitable entry point for a new contributor'],
 };
+const legacyTitles = new Map([
+  ['Epic: Host health through Grafana and public Kuma', 'Epic: VPS status with optional SSH reads'],
+  ['As a security reviewer, I can verify Hostinger tokens are refused so that no owner-scoped credential enters the server',
+    'As an on-call engineer, I can inspect VPS state and resource use so that I can identify host pressure'],
+  ['As an on-call engineer, I can read host metrics through Grafana so that I can identify resource pressure',
+    'As an on-call engineer, I can inspect recent provider actions so that I can correlate maintenance with an incident'],
+  ['As an on-call engineer, I can read public Kuma status JSON so that I can distinguish reachability from host pressure',
+    'As a security reviewer, I can opt into fixed SSH diagnostics so that host reads never accept arbitrary shell input'],
+]);
 const provingTests = {
   A: [
     ['test/core.test.ts', 'test/guardrails-foundation.test.ts', 'test/stdio.test.ts'],
@@ -33,7 +42,7 @@ const provingTests = {
   D: [['test/cloudwatch.test.ts'], ['test/cloudwatch.test.ts'], ['test/cloudwatch.test.ts']],
   E: [['test/iam.test.ts'], ['test/iam.test.ts'], ['test/iam.test.ts']],
   F: [['test/posthog.test.ts'], ['test/posthog.test.ts'], ['test/posthog.test.ts']],
-  G: [['test/hostinger.test.ts'], ['test/hostinger.test.ts'], ['test/ssh.test.ts']],
+  G: [['test/host-health.test.ts'], ['test/host-health.test.ts'], ['test/uptime.test.ts']],
   H: [['test/timeline.test.ts'], ['test/resources.test.ts'], ['test/prompts.test.ts']],
   I: [['test/evals.test.ts'], ['test/evals.test.ts'], ['test/evals.test.ts']],
   J: [['test/restart.test.ts'], ['test/restart.test.ts'], ['test/repository-guardrails.test.ts'], ['test/repository-guardrails.test.ts']],
@@ -63,6 +72,15 @@ function api(method, path, body) {
   const args = ['api', '-X', method, '-H', 'X-GitHub-Api-Version: 2026-03-10', path];
   if (body !== undefined) args.push('--input', '-');
   return json(args, body === undefined ? undefined : JSON.stringify(body));
+}
+
+export function apiAll(path, run = gh) {
+  const pages = JSON.parse(run(['api', '--paginate', '--slurp', '-H',
+    'X-GitHub-Api-Version: 2026-03-10', path]));
+  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) {
+    throw new Error('Paginated GitHub lookup returned an invalid response');
+  }
+  return pages.flat();
 }
 
 function validate() {
@@ -194,7 +212,7 @@ function ensureLabels() {
 }
 
 function ensureMilestones() {
-  const existing = api('GET', `repos/${repo}/milestones?state=all&per_page=100`);
+  const existing = apiAll(`repos/${repo}/milestones?state=all&per_page=100`);
   const byTitle = new Map(existing.map((milestone) => [milestone.title, milestone]));
   for (const milestone of plan.milestones) {
     if (!byTitle.has(milestone.id)) {
@@ -224,9 +242,18 @@ function epicBody(milestone, stories = []) {
   return `## Goal\n\n${milestone.goal}\n\n## Guardrails\n\n${milestone.guardrails.join(', ')}. Each story lists its exact IDs and proving tests.\n\n## Stories\n\n${stories.map((issue) => `- [ ] #${issue.number} — ${issue.title}`).join('\n') || 'Stories will be linked as they are created.'}\n\nSee the pinned Definition of Done issue before closing this epic.\n`;
 }
 
-function ensureIssue(issues, title, body, issueLabels) {
+export function ensureIssue(issues, title, body, issueLabels, create = api, update = api) {
   if (issues.has(title)) return assertOwnedIssue(issues.get(title), title);
-  const created = api('POST', `repos/${repo}/issues`, { title, body, labels: issueLabels });
+  const previousTitle = legacyTitles.get(title);
+  if (previousTitle && issues.has(previousTitle)) {
+    const issue = assertOwnedIssue(issues.get(previousTitle), previousTitle);
+    update('PATCH', `repos/${repo}/issues/${issue.number}`, { title, body });
+    issues.delete(previousTitle);
+    Object.assign(issue, { title, body });
+    issues.set(title, issue);
+    return issue;
+  }
+  const created = create('POST', `repos/${repo}/issues`, { title, body, labels: issueLabels });
   const issue = { number: created.number, title, url: created.html_url, body, milestone: null };
   if (!issue.number || !issue.url) throw new Error(`Issue creation returned no issue URL for ${title}`);
   issues.set(title, issue);
@@ -241,12 +268,21 @@ export function assertOwnedIssue(issue, title) {
 }
 
 function projectItems(number) {
-  const data = graphql(`query { user(login:${JSON.stringify(owner)}) { projectV2(number:${number}) {
-    items(first:100) { nodes { id content { ... on Issue { url } } } }
-  } } }`);
-  return new Map(data.user.projectV2.items.nodes
-    .filter((item) => item.content?.url)
-    .map((item) => [item.content.url, item.id]));
+  const items = new Map();
+  let cursor = null;
+  do {
+    const after = cursor ? `,after:${JSON.stringify(cursor)}` : '';
+    const data = graphql(`query { user(login:${JSON.stringify(owner)}) { projectV2(number:${number}) {
+      items(first:100${after}) { nodes { id content { ... on Issue { url } } }
+        pageInfo { hasNextPage endCursor } }
+    } } }`);
+    const page = data.user?.projectV2?.items;
+    if (!page || !Array.isArray(page.nodes)) throw new Error('Project item lookup failed');
+    for (const item of page.nodes) if (item.content?.url) items.set(item.content.url, item.id);
+    cursor = page.pageInfo?.hasNextPage ? page.pageInfo.endCursor : null;
+    if (page.pageInfo?.hasNextPage && !cursor) throw new Error('Project item cursor was missing');
+  } while (cursor);
+  return items;
 }
 
 function ensureProjectItem(project, itemIds, issue) {
@@ -290,7 +326,7 @@ function main() {
   if (project) ensureViews(project);
   ensureLabels();
   const milestones = ensureMilestones();
-  const existing = api('GET', `repos/${repo}/issues?state=all&per_page=100`)
+  const existing = apiAll(`repos/${repo}/issues?state=all&per_page=100`)
     .filter((issue) => !issue.pull_request)
     .map((issue) => ({ ...issue, url: issue.html_url }));
   const issues = new Map(existing.map((issue) => [issue.title, issue]));
