@@ -2,8 +2,8 @@
 
 <p align="center">
   <a href="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml"><img alt="Latest pull request checks" src="https://github.com/dehanz13/prd-ops-lens-mcp/actions/workflows/checks.yml/badge.svg?event=pull_request"></a>
-  <a href="#verification"><img alt="138 local tests passing" src="https://img.shields.io/badge/tests-138%20passing%20locally-brightgreen"></a>
-  <a href="#verification"><img alt="94.58 percent local line coverage" src="https://img.shields.io/badge/line%20coverage-94.58%25%20local-brightgreen"></a>
+  <a href="#verification"><img alt="148 local tests passing" src="https://img.shields.io/badge/tests-148%20passing%20locally-brightgreen"></a>
+  <a href="#verification"><img alt="94.77 percent local line coverage" src="https://img.shields.io/badge/line%20coverage-94.77%25%20local-brightgreen"></a>
   <a href="#verification"><img alt="Zero production dependency advisories in the local audit" src="https://img.shields.io/badge/production%20audit-0%20advisories%20local-brightgreen"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/dehanz13/prd-ops-lens-mcp"></a>
 </p>
