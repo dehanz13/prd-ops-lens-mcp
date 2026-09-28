@@ -40,6 +40,9 @@ implemented, so each milestone can end with a green build.
 | G7.1 | No Hostinger API provider or owner-scoped token path | `test/host-health.test.ts` |
 | G7.2 | Demo node exporter metrics read through Grafana only | `test/host-health.test.ts` |
 | G7.3 | Reachability from public Kuma status JSON; missing page is not healthy | `test/uptime.test.ts` |
+| G8.1 | Cited client-supplied evidence, ordered events, unknown missing sources | `test/timeline.test.ts` |
+| G8.2 | Explicit owner-only resources confined to configured directory | `test/resources-prompts.test.ts` |
+| G8.3 | Prompts preserve untrusted-data and read-only guidance | `test/resources-prompts.test.ts` |
 | G11.1 | Git secret scans | `test/repository-guardrails.test.ts` |
 | G11.2 | Private pre-push denylist | `test/private-denylist.test.ts` |
 | G11.3 | Pinned supply chain and SBOM | `test/repository-guardrails.test.ts` |

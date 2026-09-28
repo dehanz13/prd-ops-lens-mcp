@@ -46,6 +46,11 @@ providers:
     baseUrl: https://us.posthog.com
     tokenFile: /private/path/to/posthog-readonly.token
     projectIds: [12345]
+# Optional local knowledge. Keep the directory and its files owner-only.
+# resources:
+#   directory: /private/path/to/ops-lens-resources
+#   systemMap: system-map.md
+#   runbooks: [incident-triage.md]
 writes:
   enabled: false
   demoOnly: true

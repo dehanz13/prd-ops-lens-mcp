@@ -12,6 +12,8 @@ const baseUrl = z.url().refine((value) => {
 }, 'Use HTTPS, or HTTP on loopback for the local demo');
 
 const absolutePath = z.string().min(1).refine(isAbsolute, 'Use an absolute path');
+const resourceName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/)
+  .refine((value) => value !== '..', 'Resource name cannot be a parent path');
 
 export const ConfigSchema = z.strictObject({
   version: z.literal(1),
@@ -74,6 +76,11 @@ export const ConfigSchema = z.strictObject({
     }).refine((value) => Number(Boolean(value.tokenEnv)) + Number(Boolean(value.tokenFile)) === 1,
       'Choose exactly one tokenEnv or tokenFile').optional(),
   }).prefault({}),
+  resources: z.strictObject({
+    directory: absolutePath,
+    systemMap: resourceName.optional(),
+    runbooks: z.array(resourceName).max(20).default([]),
+  }).optional(),
   writes: z.strictObject({
     enabled: z.boolean().default(false),
     demoOnly: z.literal(true).default(true),

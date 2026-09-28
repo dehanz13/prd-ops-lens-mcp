@@ -2,7 +2,7 @@
 
 An MCP server can help an incident responder ask what happened across monitoring systems without switching between dashboards. This project builds that server as a local `stdio` process with bounded provider reads, a common evidence record, and a private audit log. It is designed so a cloned copy can start with no cloud account and enable only the providers its owner uses.
 
-**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, and PostHog reads are implemented locally. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data for the demo. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Incident correlation and agent usage reports remain on the roadmap.
+**Status:** The foundation, Grafana, Prometheus, Loki, public Uptime Kuma, CloudWatch, IAM, PostHog, and local incident correlation are implemented. A local Docker stack provides synthetic Grafana, uptime, and node-exporter data for the demo. Direct AWS reads await a reviewed read-only profile, and live PostHog reads await a project-scoped read-only key. There is no Hostinger provider in v1 because its personal tokens inherit the owner's permissions. Agent usage reports remain on the roadmap.
 
 ## The examined principle
 
@@ -63,7 +63,7 @@ only the page's public JSON. If no page is published yet, the tool returns
 | `posthog_hogql`, `posthog_insight`, `posthog_error_issues`, `posthog_flag` | Implemented locally | Bounded event queries and safe insight, issue, and flag summaries |
 | Host health | Demo query available | `node_*` through Grafana; live exporter deployment is pending |
 | Hostinger | Excluded from v1 | Personal tokens cannot prove zero write access |
-| Timeline | Planned | Cited correlation across enabled read-only providers |
+| `incident_timeline` | Implemented locally | Orders events from supplied tool results, cites each `examined` block, and marks absent expected sources unknown |
 | `plan_restart`, `restart_container` | Planned for local demo only | Exact allowlist, short confirmation token, cooldown, and audit |
 
 Configuration is validated from the file named by `OPS_LENS_CONFIG`. Grafana credentials can come from its named environment variable or an owner-only token file. PromQL is capped at 2,000 characters and 200 returned series; LogQL is capped at 1,000 lines, a six-hour hard maximum, and 200-character regexes. The example config sets a tighter one-hour window. The optional `logCode` input builds a parsed-field match, `| json | logCode="VALUE"`, for structured logs. Enabling any write tool will also require `OPS_LENS_ENABLE_WRITES=1`; the restart tool is not implemented yet.
@@ -75,6 +75,8 @@ The server starts with write actions disabled. Grafana startup checks the creden
 Uptime Kuma uses only two [public status-page endpoints](docs/permissions/uptime.md). It never returns monitor URLs or page configuration. A missing or unpublished page returns `not_published`; incomplete or unreachable data remains `unknown`. Neither is reported as healthy.
 
 Host and container health use the existing Grafana metric path. The [host-health query guide](docs/permissions/host-health.md) shows bounded `node_*` and `container_*` expressions and the evidence needed before calling a live exporter available. The MCP never loads a Hostinger token. The separate public Kuma JSON provides reachability; it does not infer host resource health.
+
+The [incident timeline contract](docs/incident-timeline.md) describes how to pass prior structured tool results into `incident_timeline`. It never queries a provider again or treats client-supplied citations as independently verified. Optional system-map and runbook resources are read only from explicitly configured owner-only files. Triage, postmortem, and maintenance prompts carry the untrusted-data instruction and request read-only evidence.
 
 CloudWatch requires a named profile in an owner-only credentials file. Startup checks the principal and simulates selected write actions before registering its tools. Logs Insights reads only configured groups, requires a final `| limit`, and stops a query that exceeds its scan cap or deadline. The [AWS permission guide](docs/permissions/aws.md) lists the needed actions. AWS identifiers are redacted by default.
 
@@ -105,7 +107,7 @@ The foundation replay has **1/1 evidence check** and **1/1 positive control** in
 ## Roadmap
 
 1. Validate CloudWatch and IAM against supplied, independently reviewed read-only profiles.
-2. Validate PostHog with a project-scoped read-only key; build VPS provider reads, correlation, resources, and prompts.
-3. Incident replay evals, the gated demo restart, agent usage reports, and a tagged release.
+2. Validate PostHog with a project-scoped read-only key; verify host and container exporters after an operator deploys them.
+3. Expand incident replay evals, prove the gated demo restart, add agent usage reports, and prepare a release after hosted CI recovers.
 
 See [SECURITY.md](SECURITY.md) for reporting and [CONTRIBUTING.md](CONTRIBUTING.md) for the local check sequence.
