@@ -12,8 +12,14 @@ it('refuses the PR checkout as a status-posting runner', () => {
   expect(script).toContain('-v "$checkout:/work:ro"');
   expect(script).toContain('$scratch/dependencies:/work/node_modules:ro');
   expect(script).toContain('$scratch/dependencies:/work/node_modules:rw');
+  expect(script).toContain('local mounts=(-v');
+  expect(script).toContain('controller stopped before all gates');
   expect(script).toContain('mktemp -d "$scratch/outputs.XXXXXX"');
   expect(script).toContain('$outputs/vite-temp:/work/node_modules/.vite-temp:rw');
+  expect(script).toContain('--tmpfs /build:rw');
+  expect(script).toContain('--tmpfs /coverage:rw');
+  expect(script).toContain('--coverage.reportsDirectory=/coverage/report');
+  expect(script).not.toContain('$outputs/dist:/work/dist');
   expect(script).not.toContain('-v "$scratch:/results"');
   expect(script).toContain('-e HOME=/tmp');
   expect(script).not.toContain('-v "$HOME');

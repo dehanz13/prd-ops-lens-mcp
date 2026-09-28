@@ -48,6 +48,14 @@ mkdir -p "$scratch/dependencies"
 # Invoked by the EXIT trap below.
 # shellcheck disable=SC2329
 cleanup() {
+  local exit_status=$?
+  if [[ ${finished:-0} -ne 1 ]]; then
+    exit_status=2
+    failed=1
+    if declare -F post >/dev/null; then
+      post setup error "self-run, node ${node_version:-unavailable}; controller stopped before all gates" || true
+    fi
+  fi
   if [[ ${failed:-0} -ne 0 && -d $scratch ]]; then
     evidence_dir="$trusted_dir/evidence/$sha"
     (umask 077; mkdir -p "$evidence_dir")
@@ -57,6 +65,8 @@ cleanup() {
   fi
   if [[ -d $checkout ]]; then git -C "$root" worktree remove --force "$checkout" >/dev/null 2>&1 || true; fi
   rm -rf "$scratch"
+  trap - EXIT
+  exit "$exit_status"
 }
 trap cleanup EXIT
 
@@ -86,6 +96,9 @@ if ! git -C "$root" worktree add --detach "$checkout" "$sha" >"$scratch/worktree
   post setup error "self-run, node $node_version; fresh worktree failed" || exit 2
   exit 2
 fi
+# Docker requires a mountpoint to exist before applying the read-only bind.
+# This empty ignored directory carries no checkout content into the gates.
+mkdir -p "$checkout/node_modules"
 cd "$checkout" || exit 2
 
 if [[ ! -f package.json || ! -f package-lock.json ]]; then
@@ -119,22 +132,24 @@ container() {
   # written by earlier untrusted checkout code.
   local outputs
   outputs=$(mktemp -d "$scratch/outputs.XXXXXX") || return 2
-  mkdir -p "$outputs/dist" "$outputs/coverage" "$outputs/vite-temp"
+  mkdir -p "$outputs/vite-temp"
   local dependencies="$scratch/dependencies:/work/node_modules:ro"
-  local vite_mount=()
+  local install=0
   if [[ ${1:-} == --install ]]; then
     dependencies="$scratch/dependencies:/work/node_modules:rw"
+    install=1
     shift
-  else
-    vite_mount=(-v "$outputs/vite-temp:/work/node_modules/.vite-temp:rw")
+  fi
+  local mounts=(-v "$checkout:/work:ro" -v "$dependencies")
+  if (( ! install )); then
+    mounts+=(-v "$outputs/vite-temp:/work/node_modules/.vite-temp:rw")
   fi
   docker run --rm --network "$network" --cap-drop ALL --security-opt no-new-privileges \
-    --read-only --tmpfs /tmp:rw,nosuid,size=256m --user "$(id -u):$(id -g)" \
+    --read-only --tmpfs /tmp:rw,nosuid,size=256m \
+    --tmpfs /build:rw,nosuid,size=128m --tmpfs /coverage:rw,nosuid,size=128m \
+    --user "$(id -u):$(id -g)" \
     -e HOME=/tmp -e npm_config_cache=/tmp/npm-cache \
-    -v "$checkout:/work:ro" -v "$dependencies" \
-    -v "$outputs/dist:/work/dist:rw" -v "$outputs/coverage:/work/coverage:rw" \
-    "${vite_mount[@]}" \
-    -w /work "$container_image" "$@"
+    "${mounts[@]}" -w /work "$container_image" "$@"
 }
 
 failed=0
@@ -278,11 +293,11 @@ fi
 
 gate lint ./node_modules/.bin/eslint .
 gate typecheck ./node_modules/.bin/tsc --noEmit
-gate tests ./node_modules/.bin/vitest run --coverage
+gate tests ./node_modules/.bin/vitest run --coverage --coverage.reportsDirectory=/coverage/report
 gate evals node --import tsx evals/run.ts
 host_gate fixtures node "$trusted_dir/lint-fixtures.mjs" --require-private
 host_gate guardrails node "$trusted_dir/check-guardrails.mjs"
-gate build ./node_modules/.bin/tsc -p tsconfig.build.json
+gate build ./node_modules/.bin/tsc -p tsconfig.build.json --outDir /build
 network_gate audit npm audit --omit=dev
 gate sbom npm sbom --package-lock-only --sbom-format cyclonedx
 host_gate gitleaks gitleaks git . --no-banner --redact
@@ -308,4 +323,5 @@ post dependency-review error "self-run, node $node_version; GitHub PR review una
 printf 'dependency-review: unavailable until GitHub Actions runs\n'
 failed=1
 
+finished=1
 exit "$failed"
