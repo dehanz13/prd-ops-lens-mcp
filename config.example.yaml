@@ -1,0 +1,23 @@
+version: 1
+audit:
+  path: /tmp/ops-lens-demo-audit.jsonl
+redaction:
+  identityKeys: [userId, playerId, sessionId]
+  identityLabels: [user, player, session, room]
+limits:
+  maxWindowMinutes: 60
+  maxRows: 1000
+  timeoutMs: 10000
+providers:
+  grafana:
+    enabled: false
+    baseUrl: https://grafana.example.invalid
+    tokenEnv: OPS_LENS_GRAFANA_TOKEN
+  uptime:
+    enabled: false
+    baseUrl: https://status.example.invalid
+    slug: demo
+writes:
+  enabled: false
+  demoOnly: true
+  containers: []
