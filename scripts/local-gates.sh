@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 # Reproduce the repository's CI commands at a committed SHA while Actions is unavailable.
 repo=dehanz13/prd-ops-lens-mcp
@@ -110,7 +110,8 @@ gate() {
     post "$name" success "self-run, node $node_version; $summary" || return 2
     printf '%s: success (%s)\n' "$name" "$summary"
   else
-    post "$name" failure "self-run, node $node_version; command failed" || return 2
+    local exit_code=$?
+    post "$name" failure "self-run, node $node_version; exit $exit_code" || return 2
     printf '%s: failure at %s\n' "$name" "$sha" >&2
     failed=1
   fi
@@ -119,7 +120,8 @@ gate() {
 if npm ci --ignore-scripts >"$scratch/npm-ci.log" 2>&1; then
   post npm-ci success "self-run, node $node_version; clean install completed" || exit 2
 else
-  post npm-ci failure "self-run, node $node_version; clean install failed" || exit 2
+  exit_code=$?
+  post npm-ci failure "self-run, node $node_version; npm ci exit $exit_code" || exit 2
   setup_ok=0
   failed=1
 fi
