@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { waitForReady } from './demo-readiness.mjs';
 
 const probes = [
   ['grafana', 'http://127.0.0.1:3000/api/health'],
@@ -11,10 +12,8 @@ const probes = [
   ['demo-api', 'http://127.0.0.1:8088/health'],
   ['uptime-kuma', 'http://127.0.0.1:3001/'],
 ];
-for (const [name, url] of probes) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  if (!response.ok) throw new Error(`${name} readiness returned HTTP ${response.status}`);
-}
+const deadline = Date.now() + 30_000;
+for (const [name, url] of probes) await waitForReady(name, url, deadline);
 
 const dir = mkdtempSync(join(tmpdir(), 'ops-lens-demo-smoke-'));
 const configPath = join(dir, 'config.yaml');

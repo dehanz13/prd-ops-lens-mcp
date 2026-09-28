@@ -1,5 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, type Stats } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -155,6 +155,28 @@ it('refuses a lock introduced by the health check before sending a restart', asy
     const api = fixture.api;
     api.health = async () => {
       writeFileSync(fixture.writes[lock], 'stop');
+      return 'healthy';
+    };
+    await expect(gate.confirm({ container: 'demo-api', token,
+      reason: 'Synthetic recovery reason' })).rejects.toMatchObject({ code: 'REFUSED' });
+    expect(fixture.restarts).toBe(0);
+  }
+});
+
+it('treats dangling symlinks at either lock path as active locks', async () => {
+  for (const lock of ['killSwitchFile', 'deployLockFile'] as const) {
+    const fixture = setup();
+    const gate = new RestartGate(fixture.writes, fixture.api, () => now);
+    symlinkSync(join(fixture.dir, 'missing-target'), fixture.writes[lock]);
+    await expect(gate.plan('demo-api')).rejects.toMatchObject({ code: 'REFUSED' });
+    expect(fixture.restarts).toBe(0);
+  }
+  for (const lock of ['killSwitchFile', 'deployLockFile'] as const) {
+    const fixture = setup();
+    const gate = new RestartGate(fixture.writes, fixture.api, () => now);
+    const token = confirmation(await gate.plan('demo-api'));
+    fixture.api.health = async () => {
+      symlinkSync(join(fixture.dir, 'missing-target'), fixture.writes[lock]);
       return 'healthy';
     };
     await expect(gate.confirm({ container: 'demo-api', token,
