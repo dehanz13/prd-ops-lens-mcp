@@ -27,3 +27,10 @@ export function evidenceScore(result: unknown, scenario: Scenario): boolean {
       citation.examined?.query === key.query &&
       Boolean(citation.examined.window?.from && citation.examined.window?.to)));
 }
+
+export function positiveControlScore(result: { isError?: boolean | undefined; structuredContent?: unknown },
+  scenario: Scenario): boolean {
+  if (result.isError || !result.structuredContent || typeof result.structuredContent !== 'object') return false;
+  const data = (result.structuredContent as { data?: TimelineData }).data;
+  return Array.isArray(data?.events) && !evidenceScore(result.structuredContent, scenario);
+}

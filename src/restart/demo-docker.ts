@@ -1,5 +1,5 @@
 import { request } from 'node:http';
-import { lstatSync } from 'node:fs';
+import { lstatSync, type Stats } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { OpsError } from '../core/result.js';
@@ -39,16 +39,29 @@ export function parseDemoTarget(value: unknown): DemoTarget {
       ? result.RestartCount : 0 };
 }
 
+export function verifyDemoDockerSocket(socket: string, stat: Stats): void {
+  if (socket !== join(homedir(), '.docker/run/docker.sock') || !stat.isSocket() ||
+    stat.isSymbolicLink() || stat.uid !== process.getuid?.()) {
+    throw new OpsError('REFUSED', 'Local Docker Desktop socket could not be verified');
+  }
+}
+
+export function parseDemoDockerIdentity(value: unknown): string {
+  const info = object(value);
+  if (info.Name !== 'docker-desktop' || info.OperatingSystem !== 'Docker Desktop' ||
+    typeof info.ID !== 'string' || info.ID.length < 8) {
+    throw new OpsError('REFUSED', 'Docker daemon is not the verified local demo host');
+  }
+  return info.ID;
+}
+
 /** A fixed Docker Desktop socket and fixed demo API paths; no CLI or remote host. */
 export class DockerDesktopDemoApi implements DemoRestartApi {
   constructor(private readonly socket: string) {
     if (socket !== join(homedir(), '.docker/run/docker.sock')) {
       throw new OpsError('REFUSED', 'Demo writes require the local Docker Desktop socket');
     }
-    const stat = lstatSync(socket);
-    if (!stat.isSocket() || stat.isSymbolicLink() || stat.uid !== process.getuid?.()) {
-      throw new OpsError('REFUSED', 'Local Docker Desktop socket could not be verified');
-    }
+    verifyDemoDockerSocket(socket, lstatSync(socket));
   }
 
   private async call(method: 'GET' | 'POST', path: string): Promise<unknown> {
@@ -59,7 +72,11 @@ export class DockerDesktopDemoApi implements DemoRestartApi {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => {
           bytes += chunk.length;
-          if (bytes > 1_000_000) { connection.destroy(); return; }
+          if (bytes > 1_000_000) {
+            reject(new OpsError('RESPONSE_LIMIT', 'Local Docker response exceeded byte cap'));
+            connection.destroy();
+            return;
+          }
           chunks.push(chunk);
         });
         response.on('end', () => {
@@ -78,12 +95,7 @@ export class DockerDesktopDemoApi implements DemoRestartApi {
   }
 
   async identity(): Promise<string> {
-    const info = object(await this.call('GET', '/info'));
-    if (info.Name !== 'docker-desktop' || info.OperatingSystem !== 'Docker Desktop' ||
-      typeof info.ID !== 'string' || info.ID.length < 8) {
-      throw new OpsError('REFUSED', 'Docker daemon is not the verified local demo host');
-    }
-    return info.ID;
+    return parseDemoDockerIdentity(await this.call('GET', '/info'));
   }
 
   async inspect(): Promise<DemoTarget> {

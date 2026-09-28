@@ -1,10 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { suiteSchema } from '../evals/scoring.js';
+import { positiveControlScore, suiteSchema } from '../evals/scoring.js';
 import { lintFixtureText } from '../scripts/lint-fixtures.mjs';
 
 const suite = suiteSchema.parse(JSON.parse(readFileSync('evals/fixtures/scenarios.json', 'utf8')));
+
+it('does not count a failed timeline call as a positive control', () => {
+  const scenario = suite.cases[0]!;
+  expect(positiveControlScore({ isError: true, structuredContent: { data: { events: [] } } }, scenario)).toBe(false);
+  expect(positiveControlScore({ isError: false, structuredContent: { data: { events: [] } } }, scenario)).toBe(true);
+  expect(positiveControlScore({ isError: false, structuredContent: { data: {} } }, scenario)).toBe(false);
+});
 
 // @guardrail G10.1: fixtures are synthetic and reject identity, real network, credential, and private-term patterns.
 it('keeps ten documented synthetic worlds and detects planted fixture violations', () => {

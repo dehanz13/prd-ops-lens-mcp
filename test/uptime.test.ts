@@ -84,6 +84,25 @@ it('does not report a stale up heartbeat as current health', async () => {
   } finally { await fixture.close(); }
 });
 
+// @guardrail G3.2: Kuma's native timezone-free heartbeat clock is interpreted as UTC.
+it('recognizes a fresh native Kuma heartbeat timestamp', async () => {
+  const nativeTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  mockServer.use(http.get(`${base}/api/status-page/heartbeat/demo`, () => {
+    const response = structuredClone(heartbeatFixture.response);
+    response.heartbeatList['7'][1]!.time = nativeTime;
+    return HttpResponse.json(response);
+  }));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    const monitors = (result.structuredContent as { data: { monitors: Array<{
+      state: string; observedAt: string | null }> } }).data.monitors;
+    expect(monitors[0]).toMatchObject({
+      state: 'up', observedAt: `${nativeTime.replace(' ', 'T')}.000Z`,
+    });
+  } finally { await fixture.close(); }
+});
+
 it('redacts a bare monitor hostname wherever a public label repeats it', async () => {
   mockServer.use(http.get(`${base}/api/status-page/demo`, () => HttpResponse.json({
     config: { published: true },
@@ -119,6 +138,17 @@ it('returns not_published when the public status-page route is 404', async () =>
     expect(result.structuredContent).toMatchObject({ data: { state: 'not_published', monitors: [] },
       examined: { rowCount: 0 } });
     expect(result.isError).toBe(false);
+  } finally { await fixture.close(); }
+});
+
+it('reports unknown when a published page has no heartbeat endpoint', async () => {
+  mockServer.use(http.get(`${base}/api/status-page/heartbeat/demo`, () =>
+    new HttpResponse(null, { status: 404 })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'uptime_status', arguments: {} });
+    expect(result.structuredContent).toMatchObject({ data: { state: 'unknown', monitors: [] },
+      examined: { warnings: ['Public status page heartbeat data is unavailable'] } });
   } finally { await fixture.close(); }
 });
 

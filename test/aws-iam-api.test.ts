@@ -1,6 +1,7 @@
 import { ListFindingsCommand } from '@aws-sdk/client-accessanalyzer';
 import { GetPolicyCommand, GetPolicyVersionCommand, GetRoleCommand,
-  ListAttachedRolePoliciesCommand, ListRolesCommand, SimulatePrincipalPolicyCommand } from '@aws-sdk/client-iam';
+  ListAttachedRolePoliciesCommand, ListRolesCommand, SimulatePrincipalPolicyCommand,
+  CreateRoleCommand } from '@aws-sdk/client-iam';
 import { GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -96,4 +97,26 @@ it('verifies the assumed role identity before using it for permission preflight'
     return { Role: { RoleName: 'demo-reader', Arn: roleArn, RoleId: 'ROLEID' } };
   });
   expect(await api.policySourceArn()).toBe(roleArn);
+});
+
+// @guardrail G1.1: adapter construction installs the SDK read guard.
+it('rejects IAM write commands on the actual constructed client', async () => {
+  const api = adapter() as unknown as { iam: { send: (command: unknown) => Promise<unknown> } };
+  await expect(api.iam.send(new CreateRoleCommand({ RoleName: 'synthetic',
+    AssumeRolePolicyDocument: '{}' }))).rejects.toMatchObject({ code: 'REFUSED' });
+});
+
+it('rejects a truncated write simulation and an assumed role with the wrong RoleId', async () => {
+  const api = adapter();
+  replaceClient(api, 'sts', () => ({ Arn: 'arn:aws:sts::000000000000:assumed-role/demo-reader/session',
+    Account: '000000000000', UserId: 'ROLEID:session' }));
+  replaceClient(api, 'iam', (command) => command instanceof GetRoleCommand
+    ? { Role: { RoleName: 'demo-reader', Arn: roleArn, RoleId: 'OTHER' } }
+    : { IsTruncated: true, EvaluationResults: [{ EvalActionName: 'iam:CreateRole', EvalDecision: 'allowed' }] });
+  await expect(api.policySourceArn()).rejects.toMatchObject({ code: 'REFUSED' });
+  await expect(api.simulateWrites(roleArn, ['iam:CreateRole'])).rejects.toMatchObject({ code: 'REFUSED' });
+  replaceClient(api, 'iam', () => ({
+    EvaluationResults: [{ EvalActionName: 'iam:CreateRole', EvalDecision: 'allowed' }],
+  }));
+  expect(await api.simulateWrites(roleArn, ['iam:CreateRole'])).toEqual({ 'iam:CreateRole': true });
 });

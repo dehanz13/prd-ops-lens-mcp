@@ -61,7 +61,7 @@ implemented, so each milestone can end with a green build.
 | G11.4 | Restricted offline CI | `test/repository-guardrails.test.ts` |
 | G11.5 | Synthetic public fixtures | `test/repository-guardrails.test.ts` |
 
-G7.2 (SSH command confinement) and G7.3 (Docker-group exclusion) are retired, not
-reassigned. The founder removed the Hostinger/SSH provider from v1 because its
-credential could not be scoped to read-only access. G7.4 and G7.5 trace the
-approved Grafana and public Kuma replacement.
+G7.2 (SSH command confinement) and G7.3 (Docker-group exclusion) are deferred
+from v1 and are not reassigned. The Hostinger provider was removed because its
+personal token could not be scoped to read-only access. G7.4 and G7.5 trace
+the approved Grafana and public Kuma path for v1.

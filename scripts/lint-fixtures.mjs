@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadPrivateTerms } from './private-denylist.mjs';
 
 const privatePath = join(homedir(), '.config/prd-ops-lens-mcp/denylist.txt');
 
@@ -46,8 +47,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     process.stderr.write('Fixture lint cannot run the required private-term check.\n');
     process.exit(2);
   }
-  const terms = existsSync(privatePath) ? readFileSync(privatePath, 'utf8').split(/\r?\n/)
-    .map((line) => line.trim()).filter((line) => line && !line.startsWith('#')) : [];
+  const terms = existsSync(privatePath) ? loadPrivateTerms(privatePath) : [];
   const files = [...fixtureFiles('test/fixtures'), ...fixtureFiles('evals/fixtures')];
   let violations = 0;
   for (const path of files) {

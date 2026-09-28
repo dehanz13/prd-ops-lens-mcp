@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -24,4 +24,8 @@ it('requires an owner-only nonempty denylist', () => {
   expect(loadPrivateTerms(path)).toEqual(['private-term']);
   chmodSync(path, 0o644);
   expect(() => loadPrivateTerms(path)).toThrow('owner-only');
+  chmodSync(path, 0o600);
+  const link = join(mkdtempSync(join(tmpdir(), 'denylist-link-')), 'denylist.txt');
+  symlinkSync(path, link);
+  expect(() => loadPrivateTerms(link)).toThrow('owner-only');
 });

@@ -80,6 +80,22 @@ describe('foundation guardrails', () => {
     expect(configured.text('2026-01-01 00:45:00.000')).toBe('2026-01-01 00:45:00.000');
   });
 
+  it('redacts identity assignments, nested JSON, arrays, and complete base64 secrets', () => {
+    const configured = new Redactor({ identityKeys: ['playerId', 'player_id'],
+      identityLabels: ['player'], identityValues: [], awsIdentifiers: true });
+    const planted = [
+      'playerId=p-777', 'playerId: p-777', 'player_id=p-777',
+      '{"playerId":["p-777"],"player":{"id":"p-777"}}',
+      '{\\"playerId\\":\\"p-777\\"}',
+    ];
+    for (const value of planted) expect(configured.text(value)).not.toContain('p-777');
+    const secret = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+    expect(secret).toHaveLength(40);
+    expect(configured.text(`secret-shaped ${secret} end`)).not.toContain(secret);
+    const sha1 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b';
+    expect(configured.text(`hash ${sha1} end`)).not.toContain(sha1);
+  });
+
   // @guardrail G0.4: oversized output is replaced and its examined record is marked.
   it('caps output bytes and reports truncation', async () => {
     const { log } = audit();

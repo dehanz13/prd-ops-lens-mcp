@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
@@ -132,15 +132,39 @@ export function providerToken(envName: string, env: NodeJS.ProcessEnv = process.
 
 /** Read an owner-only credential file without including its value in errors. */
 export function readPrivateCredentialFile(path: string): string {
-  assertPrivateCredentialFile(path);
-  const value = readFileSync(path, 'utf8').trim();
+  const descriptor = openPrivateCredentialFile(path);
+  let value: string;
+  try {
+    value = readFileSync(descriptor, 'utf8').trim();
+  } finally {
+    closeSync(descriptor);
+  }
   if (!value) throw new Error('Credential file is empty');
   return value;
 }
 
 export function assertPrivateCredentialFile(path: string): void {
-  const status = lstatSync(path);
-  if (!status.isFile() || status.uid !== process.getuid?.() || (status.mode & 0o077) !== 0) {
+  closeSync(openPrivateCredentialFile(path));
+}
+
+function openPrivateCredentialFile(path: string): number {
+  if (typeof constants.O_NOFOLLOW !== 'number') {
+    throw new Error('Credential file must be an owner-only regular file');
+  }
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    throw new Error('Credential file must be an owner-only regular file');
+  }
+  try {
+    const status = fstatSync(descriptor);
+    if (!status.isFile() || status.uid !== process.getuid?.() || (status.mode & 0o077) !== 0) {
+      throw new Error('Credential file must be an owner-only regular file');
+    }
+    return descriptor;
+  } catch {
+    closeSync(descriptor);
     throw new Error('Credential file must be an owner-only regular file');
   }
 }

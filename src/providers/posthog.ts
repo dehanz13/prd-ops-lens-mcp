@@ -122,6 +122,7 @@ export class PostHogProvider implements ProviderModule {
     }
     const columns = value.columns as string[];
     if (columns.length !== bounded.columns.length ||
+      columns.some((column, index) => column !== bounded.columns[index]) ||
       value.results.some((row) => (row as unknown[]).length !== bounded.columns.length)) {
       throw new OpsError('UPSTREAM', 'PostHog query columns were malformed');
     }

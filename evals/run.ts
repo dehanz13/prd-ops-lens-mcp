@@ -11,7 +11,7 @@ import { GrafanaProvider } from '../src/providers/grafana.js';
 import { PostHogProvider } from '../src/providers/posthog.js';
 import { UptimeProvider } from '../src/providers/uptime.js';
 import { createServer } from '../src/server.js';
-import { evidenceScore, suiteSchema, type Scenario } from './scoring.js';
+import { evidenceScore, positiveControlScore, suiteSchema, type Scenario } from './scoring.js';
 
 const suite = suiteSchema.parse(JSON.parse(readFileSync('evals/fixtures/scenarios.json', 'utf8')));
 const directory = mkdtempSync(join(tmpdir(), 'ops-lens-evals-'));
@@ -161,7 +161,7 @@ try {
     const removed = await client.callTool({ name: 'incident_timeline', arguments: {
       sources: await sourcesFor(scenario, true), expectedTools: scenario.sources.map((source) => source.tool),
     } });
-    if (!evidenceScore(removed.structuredContent, scenario)) positiveControlsPassed += 1;
+    if (positiveControlScore(removed, scenario)) positiveControlsPassed += 1;
   }
 } finally {
   await client.close();

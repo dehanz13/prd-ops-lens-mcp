@@ -49,9 +49,16 @@ it('keeps private example configuration out of public tracking', () => {
 });
 
 it('fails traceability for both missing tests and unknown tags', () => {
-  expect(checkTraceability('| G0.1 | thing | `test/one.test.ts` |', [])).toEqual({ missing: ['G0.1'], unknown: [] });
-  expect(checkTraceability('', ['// @guardrail G0.2'])).toEqual({ missing: [], unknown: ['G0.2'] });
+  expect(checkTraceability('| G0.1 | thing | `test/one.test.ts` |', []))
+    .toEqual({ missing: ['G0.1'], unknown: [], malformed: [], parsedCount: 1 });
+  expect(checkTraceability('', ['// @guardrail G0.2']))
+    .toEqual({ missing: [], unknown: ['G0.2'], malformed: [], parsedCount: 0 });
   expect(checkTraceability('| G0.1 | thing | `test/one.test.ts` |', [
     { path: 'test/other.test.ts', source: '// @guardrail G0.1' },
-  ])).toEqual({ missing: ['G0.1'], unknown: [] });
+  ])).toEqual({ missing: ['G0.1'], unknown: [], malformed: [], parsedCount: 1 });
+});
+
+it('fails traceability when a guardrail row has no parseable test path', () => {
+  const result = checkTraceability('| G7.2 | SSH read path | pending |', []);
+  expect(result).toMatchObject({ malformed: ['G7.2'], parsedCount: 0 });
 });

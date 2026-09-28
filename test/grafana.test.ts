@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigSchema } from '../src/core/config.js';
+import { assertAllowedRequest } from '../src/core/allowlist.js';
 import { BoundedHttpClient } from '../src/core/http.js';
-import { buildStructuredLogCodeQuery, GrafanaProvider } from '../src/providers/grafana.js';
+import { buildStructuredLogCodeQuery, GrafanaProvider, grafanaRoutes } from '../src/providers/grafana.js';
 import { createServer } from '../src/server.js';
 import dashboardsFixture from './fixtures/grafana/dashboards.json' with { type: 'json' };
 import alertsFixture from './fixtures/grafana/alerts.json' with { type: 'json' };
@@ -46,6 +47,17 @@ const from = '2026-01-01T00:00:00.000Z';
 const to = '2026-01-01T01:00:00.000Z';
 
 describe('Grafana tools', () => {
+  // @guardrail G0.1: test the provider's own allowlist, including Loki's index preflight.
+  it('allows only its declared read paths and the data-source query endpoint', () => {
+    const config = ConfigSchema.parse({ version: 1, audit: { path: '/tmp/synthetic-audit.jsonl' },
+      providers: { grafana: { enabled: true, baseUrl: base, prometheusUid: 'prom', lokiUid: 'loki' } } });
+    const routes = grafanaRoutes(config.providers.grafana!);
+    expect(() => assertAllowedRequest('Grafana', 'POST', '/api/ds/query', routes)).not.toThrow();
+    expect(() => assertAllowedRequest('Grafana', 'GET',
+      '/api/datasources/proxy/uid/loki/loki/api/v1/index/stats', routes)).not.toThrow();
+    expect(() => assertAllowedRequest('Grafana', 'POST', '/api/dashboards/db', routes)).toThrow('not allowlisted');
+    expect(() => assertAllowedRequest('Grafana', 'GET', '/api/admin/users', routes)).toThrow('not allowlisted');
+  });
   // @guardrail G1.2: plugin write actions fail startup even with an obsolete override flag.
   it('refuses a write-capable Grafana token at provider startup', async () => {
     mockServer.use(http.get(`${base}/api/access-control/user/permissions`, () =>
@@ -112,7 +124,9 @@ describe('Grafana tools', () => {
 
   // @guardrail G2.2: PromQL range bounds and step are checked before a query.
   it('uses at least a 60-second step and caps a range window', async () => {
+    let requests = 0;
     mockServer.use(http.post(`${base}/api/ds/query`, async ({ request }) => {
+      requests += 1;
       const body = await request.json() as { queries: Array<{ intervalMs: number }> };
       expect(body.queries[0]?.intervalMs).toBe(60_000);
       return HttpResponse.json(prometheusMatrixFixture.response);
@@ -121,6 +135,11 @@ describe('Grafana tools', () => {
     try {
       const result = await fixture.client.callTool({ name: 'prometheus_range', arguments: { query: 'up', from, to, stepSeconds: 60 } });
       expect(result.structuredContent).toMatchObject({ examined: { rowCount: 2, truncated: false } });
+      const tooFine = await fixture.client.callTool({ name: 'prometheus_range', arguments: {
+        query: 'up', from, to, stepSeconds: 59,
+      } });
+      expect(tooFine.isError).toBe(true);
+      expect(requests).toBe(1);
       const refused = await fixture.client.callTool({ name: 'prometheus_range', arguments: {
         query: 'up', from, to: '2026-01-01T02:00:00.000Z', stepSeconds: 60,
       } });

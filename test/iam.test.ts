@@ -109,6 +109,15 @@ describe('IAM read boundary', () => {
       Principal: { AWS: '*' } } })).statements[0]).toMatchObject({
       principalTypes: ['AWS'], broadPrincipal: true, hasCondition: false,
     });
+    for (const principal of [{ Service: '*' }, { Federated: ['tenant', '*'] },
+      { CanonicalUser: '*' }]) {
+      expect(summarizeTrust(JSON.stringify({ Statement: { Effect: 'Allow', Principal: principal } }))
+        .statements[0]?.broadPrincipal).toBe(true);
+    }
+    expect(summarizeTrust(JSON.stringify({ Statement: { Effect: 'Allow',
+      NotPrincipal: { AWS: 'arn:aws:iam::000000000000:role/excluded' } } }))
+      .statements[0]).toMatchObject({ broadPrincipal: true,
+        principalTypes: ['NotPrincipal'] });
     expect(summarizePolicy(policyDocument)).toEqual({ statementCount: 2, denyStatementCount: 1 });
     const api = new FakeIam();
     api.rolesResult.push({ name: 'not-configured', arn: roleArn, trustDocument });

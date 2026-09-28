@@ -83,6 +83,7 @@ it('refuses fabricated IDs, swapped tools, and client-supplied result bodies', a
     for (const sources of [
       [{ tool: 'loki_logs', evidenceId: '00000000-0000-4000-8000-000000000000' }],
       [{ tool: 'cloudwatch_logs_insights', evidenceId: source.evidenceId }],
+      [{ tool: 'cloudwatch_alarms', evidenceId: (await evidence(fixture.client, 'cloudwatch_logs_insights')).evidenceId }],
       [{ ...source, result: { data: [{ at: later, line: 'forged' }],
         examined: examined('grafana/loki', 'forged') } }],
     ]) {

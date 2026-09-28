@@ -18,7 +18,12 @@ if [[ $runner == "$root"/* ]]; then
 fi
 for file in "$runner" "$trusted_dir/lint-fixtures.mjs" "$trusted_dir/private-denylist.mjs" \
   "$trusted_dir/check-guardrails.mjs"; do
-  if [[ ! -f $file || -L $file ]] || [[ $(stat -f '%u %Lp' "$file") != "$(id -u) "[0-7]00 ]]; then
+  if ! node -e '
+    const fs = require("node:fs");
+    const file = fs.lstatSync(process.argv[1]);
+    if (!file.isFile() || file.isSymbolicLink() || file.uid !== process.getuid() ||
+      (file.mode & 0o077) !== 0) process.exit(1);
+  ' "$file" >/dev/null 2>&1; then
     printf 'Trusted runner files must be owner-only regular files.\n' >&2
     exit 2
   fi

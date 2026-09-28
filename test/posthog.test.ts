@@ -147,6 +147,21 @@ it('rejects an upstream column shape that could relabel private data', async () 
   } finally { await fixture.close(); }
 });
 
+it('refuses equal-length upstream column labels that disagree with the safe projection', async () => {
+  mock.use(http.post(`${base}/api/projects/123/query/`, () => HttpResponse.json({
+    columns: ['email', 'count'], results: [['private-identity', 3]],
+  })));
+  const fixture = await harness();
+  try {
+    const result = await fixture.client.callTool({ name: 'posthog_hogql', arguments: {
+      projectId: 123, query: 'SELECT event, count(*) FROM events GROUP BY event',
+      from: '2026-01-01T00:00:00Z', to: '2026-01-01T00:10:00Z',
+    } });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('private-identity');
+  } finally { await fixture.close(); }
+});
+
 it('refuses a project outside the allowlist and returns unknown for a missing flag', async () => {
   mock.use(http.get(`${base}/api/projects/123/feature_flags/8/`, () => new HttpResponse(null, { status: 404 })));
   const fixture = await harness();

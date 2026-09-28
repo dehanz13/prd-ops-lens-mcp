@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { lstatSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,11 +12,27 @@ export function containsPrivateTerm(diff, terms) {
 }
 
 export function loadPrivateTerms(path) {
-  const file = lstatSync(path);
-  if (!file.isFile() || (file.mode & 0o077) !== 0 || file.uid !== process.getuid?.()) {
+  if (typeof constants.O_NOFOLLOW !== 'number') {
     throw new Error('Private denylist must be an owner-only regular file');
   }
-  const terms = readFileSync(path, 'utf8').split(/\r?\n/)
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const file = fstatSync(descriptor);
+    if (!file.isFile() || (file.mode & 0o077) !== 0 || file.uid !== process.getuid?.()) {
+      throw new Error('Private denylist must be an owner-only regular file');
+    }
+  } catch {
+    if (descriptor !== undefined) closeSync(descriptor);
+    throw new Error('Private denylist must be an owner-only regular file');
+  }
+  let content;
+  try {
+    content = readFileSync(descriptor, 'utf8');
+  } finally {
+    closeSync(descriptor);
+  }
+  const terms = content.split(/\r?\n/)
     .map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
   if (terms.length === 0) throw new Error('Private denylist has no terms');
   return terms;

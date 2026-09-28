@@ -46,14 +46,12 @@ export function summarizeTrust(document: string) {
   const all = statements(document);
   const rows = all.slice(0, 20).map((statement) => {
     const principal = statement.Principal;
-    const principalTypes = principal === '*' ? ['wildcard']
+    const principalTypes = statement.NotPrincipal !== undefined ? ['NotPrincipal']
+      : principal === '*' ? ['wildcard']
       : principal && typeof principal === 'object' && !Array.isArray(principal)
         ? Object.keys(principal).filter((key) => ['AWS', 'Service', 'Federated', 'CanonicalUser'].includes(key)).sort()
         : [];
-    const awsPrincipal = principal && typeof principal === 'object' && !Array.isArray(principal)
-      ? (principal as Record<string, unknown>).AWS : undefined;
-    const broadPrincipal = principal === '*' || awsPrincipal === '*' ||
-      (Array.isArray(awsPrincipal) && awsPrincipal.includes('*'));
+    const broadPrincipal = statement.NotPrincipal !== undefined || hasWildcard(principal);
     const condition = statement.Condition;
     const hasCondition = Boolean(condition && typeof condition === 'object' && !Array.isArray(condition)
       && Object.keys(condition).length);
@@ -66,6 +64,13 @@ export function summarizeTrust(document: string) {
       hasCondition, externalIdRequired };
   });
   return { statements: rows, truncated: all.length > 20 };
+}
+
+function hasWildcard(value: unknown): boolean {
+  if (typeof value === 'string') return value.includes('*');
+  if (Array.isArray(value)) return value.some(hasWildcard);
+  return value !== null && typeof value === 'object' &&
+    Object.values(value).some(hasWildcard);
 }
 
 export function summarizePolicy(document: string) {

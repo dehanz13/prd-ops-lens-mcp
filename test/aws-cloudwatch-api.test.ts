@@ -1,7 +1,7 @@
-import { DescribeAlarmsCommand, GetMetricDataCommand } from '@aws-sdk/client-cloudwatch';
+import { DescribeAlarmsCommand, GetMetricDataCommand, PutMetricAlarmCommand } from '@aws-sdk/client-cloudwatch';
 import { DescribeLogGroupsCommand, GetQueryResultsCommand, StartQueryCommand,
   StopQueryCommand } from '@aws-sdk/client-cloudwatch-logs';
-import { GetRoleCommand, SimulatePrincipalPolicyCommand } from '@aws-sdk/client-iam';
+import { GetRoleCommand, SimulatePrincipalPolicyCommand, CreateRoleCommand } from '@aws-sdk/client-iam';
 import { GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -97,6 +97,34 @@ it('verifies AWS identities and refuses incomplete permission simulation', async
   expect(await api.policySourceArn()).toBe('arn:aws:iam::000000000000:role/synthetic-role');
   expect(await api.simulateWrites('arn:aws:iam::000000000000:role/synthetic-role',
     ['iam:CreateRole'])).toEqual({ 'iam:CreateRole': false });
+});
+
+// @guardrail G1.1: real constructed SDK clients retain the command guard.
+it('rejects write commands at every constructed CloudWatch adapter client', async () => {
+  const api = adapter() as unknown as Record<string, { send: (command: unknown) => Promise<unknown> }>;
+  await expect(api.metricClient!.send(new PutMetricAlarmCommand({ AlarmName: 'synthetic' })))
+    .rejects.toMatchObject({ code: 'REFUSED' });
+  await expect(api.iamClient!.send(new CreateRoleCommand({ RoleName: 'synthetic',
+    AssumeRolePolicyDocument: '{}' }))).rejects.toMatchObject({ code: 'REFUSED' });
+});
+
+it('refuses an allowed simulation decision, a truncated simulation, and a mismatched role ID', async () => {
+  const api = adapter();
+  replaceClient(api, 'stsClient', () => ({
+    Arn: 'arn:aws:sts::000000000000:assumed-role/synthetic-role/session',
+    Account: '000000000000', UserId: 'ROLEID:session',
+  }));
+  replaceClient(api, 'iamClient', (command) => command instanceof GetRoleCommand
+    ? { Role: { Arn: 'arn:aws:iam::000000000000:role/synthetic-role', RoleId: 'OTHER' } }
+    : { IsTruncated: true, EvaluationResults: [{ EvalActionName: 'iam:CreateRole', EvalDecision: 'allowed' }] });
+  await expect(api.policySourceArn()).rejects.toMatchObject({ code: 'REFUSED' });
+  await expect(api.simulateWrites('arn:aws:iam::000000000000:role/synthetic-role',
+    ['iam:CreateRole'])).rejects.toMatchObject({ code: 'REFUSED' });
+  replaceClient(api, 'iamClient', () => ({
+    EvaluationResults: [{ EvalActionName: 'iam:CreateRole', EvalDecision: 'allowed' }],
+  }));
+  expect(await api.simulateWrites('arn:aws:iam::000000000000:role/synthetic-role',
+    ['iam:CreateRole'])).toEqual({ 'iam:CreateRole': true });
 });
 
 // @guardrail G0.9: the CloudWatch provider cannot inherit another AWS profile or run a credential process.

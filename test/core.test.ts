@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -71,6 +71,14 @@ describe('configuration', () => {
     })).toThrow();
     chmodSync(path, 0o644);
     expect(() => providerTokenFile(path)).toThrow('owner-only');
+  });
+
+  it('refuses a credential symlink even when its target is owner-only', () => {
+    const target = temporaryFile('target.token');
+    const link = temporaryFile('link.token');
+    writeFileSync(target, 'synthetic-token', { mode: 0o600 });
+    symlinkSync(target, link);
+    expect(() => providerTokenFile(link)).toThrow('owner-only');
   });
 });
 

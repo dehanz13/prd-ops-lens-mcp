@@ -59,8 +59,14 @@ function statusName(value: number): 'down' | 'up' | 'pending' | 'maintenance' | 
 }
 
 function unambiguousTime(value: string): string | null {
-  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) return null;
-  return new Date(value).toISOString();
+  const native = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value);
+  const candidate = native ? `${value.replace(' ', 'T')}Z` : value;
+  if (!native && !/(?:Z|[+-]\d{2}:\d{2})$/.test(candidate)) return null;
+  const parsed = Date.parse(candidate);
+  if (!Number.isFinite(parsed)) return null;
+  const normalized = new Date(parsed).toISOString();
+  if (native && normalized.slice(0, 19) !== candidate.slice(0, 19)) return null;
+  return normalized;
 }
 
 export class UptimeProvider implements ProviderModule {
@@ -89,10 +95,8 @@ export class UptimeProvider implements ProviderModule {
     let bytes = 0;
     try {
       const status = await ctx.client.get(statusPath);
-      const heartbeats = await ctx.client.get(heartbeatPath);
       statusBody = status.body;
-      heartbeatBody = heartbeats.body;
-      bytes = status.bytes + heartbeats.bytes;
+      bytes = status.bytes;
     } catch (error) {
       if (error instanceof OpsError && error.code === 'NOT_FOUND') {
         return this.unavailable(started, 'Public status page is not published', 0, 'not_published');
@@ -105,6 +109,15 @@ export class UptimeProvider implements ProviderModule {
     if (publication.success && !publication.data.config.published) {
       return this.unavailable(started, 'Public status page is not published', bytes, 'not_published');
     }
+
+    try {
+      const heartbeats = await ctx.client.get(heartbeatPath);
+      heartbeatBody = heartbeats.body;
+      bytes += heartbeats.bytes;
+    } catch {
+      return this.unavailable(started, 'Public status page heartbeat data is unavailable', bytes);
+    }
+
     const page = z.object({ config: z.object({ published: z.boolean() }).passthrough(),
       incidents: z.array(z.unknown()), publicGroupList: z.array(groupSchema),
     }).passthrough().safeParse(statusBody);
@@ -128,7 +141,7 @@ export class UptimeProvider implements ProviderModule {
       const fresh = ageMs >= 0 && ageMs <= ctx.uptime.maxHeartbeatAgeSeconds * 1000;
       const state = newest && fresh ? statusName(newest.status) : 'unknown';
       if (state === 'unknown') warnings.push('A monitor has no usable heartbeat');
-      if (newest && !observedAt) warnings.push('A heartbeat time lacked a UTC offset; timestamp omitted');
+      if (newest && !observedAt) warnings.push('A heartbeat time was invalid or ambiguous; timestamp omitted');
       if (newest && observedAt && !fresh) warnings.push('A monitor heartbeat is stale or future-dated');
       const uptime24 = heartbeat.data.uptimeList[`${monitor.id}_24`];
       return {

@@ -96,7 +96,7 @@ function logRows(source: Frame[], limit: number): { rows: unknown[]; scanned: nu
 type GrafanaConfig = NonNullable<Config['providers']['grafana']>;
 type GrafanaContext = { config: Config; runtime: ToolRuntime; client: BoundedHttpClient; grafana: GrafanaConfig };
 
-function grafanaRoutes(grafana: GrafanaConfig) {
+export function grafanaRoutes(grafana: GrafanaConfig) {
   return [
     { method: 'GET' as const, path: '/api/access-control/user/permissions' },
     { method: 'GET' as const, path: '/api/search/' },

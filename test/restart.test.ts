@@ -1,11 +1,13 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, type Stats } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { ConfigSchema } from '../src/core/config.js';
 import { createServer } from '../src/server.js';
-import { DockerDesktopDemoApi, parseDemoTarget, type DemoRestartApi,
+import { DockerDesktopDemoApi, parseDemoDockerIdentity, parseDemoTarget,
+  verifyDemoDockerSocket, type DemoRestartApi,
   type DemoTarget } from '../src/restart/demo-docker.js';
 import { DemoRestartProvider, RestartGate } from '../src/restart/gated-restart.js';
 
@@ -197,6 +199,56 @@ it('confines the real Docker adapter to the fixed local socket and exact demo la
   expect(() => parseDemoTarget({ ...target, Config: { Labels: {
     'com.docker.compose.project': 'ops-lens-demo', 'com.docker.compose.service': 'other' } } }))
     .toThrow('not the running local demo');
+});
+
+it('rejects a symlink, regular file, or foreign-owner Docker socket and wrong daemon identity', () => {
+  const socket = join(homedir(), '.docker/run/docker.sock');
+  const valid = { uid: process.getuid?.(), isSocket: () => true,
+    isSymbolicLink: () => false } as Stats;
+  expect(() => verifyDemoDockerSocket(socket, valid)).not.toThrow();
+  for (const stat of [
+    { ...valid, isSocket: () => false },
+    { ...valid, isSymbolicLink: () => true },
+    { ...valid, uid: (process.getuid?.() ?? 0) + 1 },
+  ]) expect(() => verifyDemoDockerSocket(socket, stat as Stats)).toThrow('could not be verified');
+  expect(parseDemoDockerIdentity({ Name: 'docker-desktop', OperatingSystem: 'Docker Desktop',
+    ID: 'synthetic-daemon-id' })).toBe('synthetic-daemon-id');
+  for (const info of [
+    { Name: 'remote', OperatingSystem: 'Docker Desktop', ID: 'synthetic-daemon-id' },
+    { Name: 'docker-desktop', OperatingSystem: 'Linux', ID: 'synthetic-daemon-id' },
+    { Name: 'docker-desktop', OperatingSystem: 'Docker Desktop', ID: 'short' },
+  ]) expect(() => parseDemoDockerIdentity(info)).toThrow('not the verified local demo host');
+});
+
+it('rejects oversized Docker responses through the actual socket transport', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ops-docker-socket-'));
+  dirs.push(dir);
+  const socket = join(dir, 'docker.sock');
+  const server = createHttpServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('x'.repeat(1_000_001));
+  });
+  await new Promise<void>((resolve) => server.listen(socket, resolve));
+  try {
+    const adapter = Object.assign(Object.create(DockerDesktopDemoApi.prototype), { socket }) as DockerDesktopDemoApi;
+    await expect(adapter.identity()).rejects.toMatchObject({ code: 'RESPONSE_LIMIT' });
+  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+});
+
+it('refuses a non-Desktop daemon reported by the real /info transport', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ops-docker-info-'));
+  dirs.push(dir);
+  const socket = join(dir, 'docker.sock');
+  const server = createHttpServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ Name: 'remote-daemon', OperatingSystem: 'Docker Desktop',
+      ID: 'synthetic-daemon-id' }));
+  });
+  await new Promise<void>((resolve) => server.listen(socket, resolve));
+  try {
+    const adapter = Object.assign(Object.create(DockerDesktopDemoApi.prototype), { socket }) as DockerDesktopDemoApi;
+    await expect(adapter.identity()).rejects.toMatchObject({ code: 'REFUSED' });
+  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
 });
 
 it('refuses a non-container ID before constructing a Docker restart request', async () => {
