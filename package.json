@@ -32,7 +32,7 @@
     "@aws-sdk/client-cloudwatch": "^3.1141.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1141.0",
     "@aws-sdk/client-iam": "^3.1141.0",
-    "@aws-sdk/client-sts": "^3.1141.0",
+    "@aws-sdk/client-sts": "^3.1145.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "yaml": "^2.8.0",
     "zod": "^4.0.0"
